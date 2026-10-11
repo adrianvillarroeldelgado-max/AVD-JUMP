@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>AVD jump — Descarga</title>
+<meta name="description" content="Mide CMJ, Drop Jump, asimetrías y perfil fuerza-velocidad con la cámara lenta de tu Android.">
+<link rel="icon" href="logo.png">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@1,700;1,800&family=Barlow:wght@400;500;600&display=swap">
+<style>
+:root{
+  --bg:#f3f4f6; --surface:#ffffff; --ink:#111111; --muted:#5d6370; --line:#dcdfe5;
+  --accent:#d9481f; --accent-ink:#ffffff;
+  --display:"Barlow Condensed","Arial Narrow",sans-serif;
+  --body:"Barlow",system-ui,-apple-system,"Segoe UI",sans-serif;
+}
+@media (prefers-color-scheme: dark){:root{
+  --bg:#0f1012; --surface:#1a1c20; --ink:#f1f2f4; --muted:#a2a8b3; --line:#2c2f36; --accent:#f0643a; --accent-ink:#111;
+}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);font-size:16px;line-height:1.5}
+main{max-width:640px;margin:0 auto;padding:32px 16px 48px;display:flex;flex-direction:column;gap:22px}
+.logo{width:220px;max-width:70%;margin:0 auto;display:block}
+@media (prefers-color-scheme: dark){.logo{filter:invert(1)}}
+h1{font-family:var(--display);font-style:italic;font-weight:800;font-size:clamp(34px,8vw,46px);line-height:1;margin:0;text-align:center;letter-spacing:.01em;text-wrap:balance}
+.lead{text-align:center;color:var(--muted);margin:0 auto;max-width:34em}
+.cta{display:flex;flex-direction:column;align-items:center;gap:8px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:10px;background:var(--accent);color:var(--accent-ink);text-decoration:none;
+  font-family:var(--display);font-style:italic;font-weight:800;font-size:24px;letter-spacing:.02em;padding:14px 28px;border-radius:8px;min-width:260px}
+.btn:focus-visible{outline:3px solid var(--ink);outline-offset:3px}
+.small{font-size:13px;color:var(--muted);text-align:center}
+.small a{color:inherit}
+section{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:18px 18px}
+h2{font-family:var(--display);font-style:italic;font-weight:700;font-size:24px;margin:0 0 10px}
+ol,ul{margin:0;padding-left:22px;display:flex;flex-direction:column;gap:6px}
+.tests{display:flex;flex-wrap:wrap;gap:6px;list-style:none;padding:0}
+.tests li{border:1px solid var(--line);border-radius:999px;padding:3px 10px;font-size:14px;font-weight:500}
+footer{text-align:center;font-size:13px;color:var(--muted)}
+</style>
+</head>
+<body>
+<main>
+  <img class="logo" src="logo.png" alt="AVD jump">
+  <h1>Mide el salto con la cámara lenta del teléfono</h1>
+  <p class="lead">Altura por tiempo de vuelo a 240 fps, detección automática del despegue y el aterrizaje, perfil fuerza-velocidad y recomendaciones de entrenamiento para cada cliente.</p>
+
+  <div class="cta">
+    <a class="btn" id="dl" href="#">Descargar APK</a>
+    <div class="small" id="ver">Android 9 o superior · gratis</div>
+  </div>
+
+  <section>
+    <h2>Instalar</h2>
+    <ol>
+      <li>Pulsa <b>Descargar APK</b> desde el teléfono Android.</li>
+      <li>Abre el archivo descargado. Si aparece un aviso, permite <b>Instalar apps desconocidas</b> para tu navegador.</li>
+      <li>Pulsa <b>Instalar</b>. Para actualizar, descarga la versión nueva e instálala encima: tus clientes y saltos se conservan.</li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>Qué mide</h2>
+    <ul class="tests">
+      <li>CMJ</li><li>CMJ con brazos</li><li>Squat jump</li><li>Drop Jump · RSI</li>
+      <li>CMJ a una pierna · asimetría</li><li>Saltos repetidos · fatiga</li><li>Perfil fuerza-velocidad</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Para grabar bien</h2>
+    <ul>
+      <li>Teléfono fijo a 1–2 m, lente a la altura de los tobillos.</li>
+      <li>Mucha luz y calzado que contraste con el suelo.</li>
+      <li>Arrastra la línea naranja hasta donde apoyan los pies: las marcas salen solas.</li>
+    </ul>
+  </section>
+
+  <footer>AVD · Entrenamiento físico deportivo · <a id="src" href="#">Todas las versiones</a> · <a href="privacidad.html">Privacidad</a></footer>
+</main>
+<script>
+// Deduce el repositorio desde la dirección de GitHub Pages: https://USUARIO.github.io/REPO/
+(function () {
+  var host = location.hostname, user = host.split(".")[0];
+  var repo = location.pathname.split("/").filter(Boolean)[0] || (user + ".github.io");
+  var base = "https://github.com/" + user + "/" + repo;
+  if (!/\.github\.io$/.test(host)) return; // vista local: deja los enlaces sin cambiar
+  document.getElementById("dl").href = base + "/releases/latest/download/AVD-jump.apk";
+  document.getElementById("src").href = base + "/releases";
+  fetch("https://api.github.com/repos/" + user + "/" + repo + "/releases/latest")
+    .then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (j) {
+      if (j && j.tag_name) document.getElementById("ver").textContent =
+        "Versión " + j.tag_name.replace(/^v/, "") + " · Android 9 o superior · gratis";
+    })
+    .catch(function () {});
+})();
+</script>
+</body>
+</html>

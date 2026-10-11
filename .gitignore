@@ -1,0 +1,12 @@
+# Compilación
+build/
+.gradle/
+local.properties
+*.iml
+.idea/
+
+# Firma: NUNCA subir la clave ni sus contraseñas
+*.jks
+*.keystore
+*.jks.base64
+keystore.properties
