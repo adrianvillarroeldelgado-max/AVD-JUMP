@@ -53,6 +53,10 @@ Guarda el zip de la firma en un lugar seguro (por ejemplo, Google Drive personal
 
 ## 4. Publicar una versión
 
+**Forma rápida:** cambia el número del archivo `VERSION` (por ejemplo de `1.5.0` a `1.5.1`) y guarda el cambio en `main`. GitHub compila, firma y publica la versión solo, y crea la etiqueta `v1.5.1`.
+
+**Forma manual, desde Releases:**
+
 1. En el repositorio: **Releases › Create a new release** (o *Draft a new release*).
 2. En **Choose a tag** escribe `v1.5.0` y pulsa **Create new tag**.
 3. Título: `AVD jump 1.5.0`. Pulsa **Publish release**.

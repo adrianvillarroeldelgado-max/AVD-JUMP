@@ -5,6 +5,9 @@ name: Publicar versión
 on:
   push:
     tags: ["v*"]
+    # Cambiar el número del archivo VERSION en main publica esa versión.
+    branches: ["main"]
+    paths: ["VERSION"]
   workflow_dispatch:
     inputs:
       version:
@@ -29,7 +32,9 @@ jobs:
 
       - name: Versión
         run: |
-          if [ -n "${{ github.event.inputs.version }}" ]; then V="${{ github.event.inputs.version }}"; else V="${GITHUB_REF_NAME#v}"; fi
+          if [ -n "${{ github.event.inputs.version }}" ]; then V="${{ github.event.inputs.version }}"
+          elif [ "${{ github.ref_type }}" = "tag" ]; then V="${GITHUB_REF_NAME#v}"
+          else V="$(tr -d '[:space:]' < VERSION)"; fi
           echo "VERSION_NAME=$V" >> "$GITHUB_ENV"
           echo "VERSION_CODE=$((100 + ${{ github.run_number }}))" >> "$GITHUB_ENV"
           echo "TAG=v$V" >> "$GITHUB_ENV"
