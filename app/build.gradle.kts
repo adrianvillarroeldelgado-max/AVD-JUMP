@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -5,7 +7,7 @@ plugins {
 
 // Firma de publicación: se toma de variables de entorno (secretos de GitHub) o de keystore.properties.
 // Sin ellas, el APK "release" se firma con la clave de depuración (sirve para probar, no para actualizar).
-val keystoreProps = java.util.Properties().apply {
+val keystoreProps = Properties().apply {
     val f = rootProject.file("keystore.properties")
     if (f.exists()) f.inputStream().use { load(it) }
 }
