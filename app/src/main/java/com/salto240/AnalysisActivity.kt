@@ -29,6 +29,14 @@ import kotlin.math.roundToInt
 /** Revisión cuadro a cuadro y cálculo del salto. */
 class AnalysisActivity : BaseActivity() {
 
+    companion object {
+        /** Marcas (índices de cuadro) ya detectadas por el modo en vivo. */
+        const val EX_PRESET_TAKEOFF = "presetTakeoff"
+        const val EX_PRESET_LANDING = "presetLanding"
+        const val EX_PRESET_CONTACT = "presetContact"
+        const val EX_PRESET_EVENTS = "presetEvents"
+    }
+
     private var src: FrameSource? = null
     private val exec: ExecutorService = Executors.newSingleThreadExecutor()
     private val main = Handler(Looper.getMainLooper())
@@ -106,12 +114,27 @@ class AnalysisActivity : BaseActivity() {
         if (!fromRecording) askFps(s.fileFps)
         // Grabado con la línea del suelo de la cámara: detección automática directa.
         val floorV = intent.getFloatExtra(CaptureActivity.EX_FLOOR_V, -1f)
+        val preset = presetResult()
         if (fromRecording && floorV in 0.05f..0.98f) {
             img.post {
                 imageToViewY(floorV)?.let { floorLine.translationY = it; floorLine.visibility = android.view.View.VISIBLE }
-                runAuto(0.5f, floorV, 0.38f)
+                // Modo en vivo: las marcas ya vienen calculadas a 240 fps.
+                if (preset != null) applyAuto(preset) else runAuto(0.5f, floorV, 0.38f)
             }
+        } else if (preset != null) {
+            img.post { applyAuto(preset) }
         }
+    }
+
+    /** Marcas calculadas por el modo en vivo de la cámara, si las hay. */
+    private fun presetResult(): AutoDetect.Result? {
+        val ev = intent.getIntArrayExtra(EX_PRESET_EVENTS)?.toList() ?: emptyList()
+        val to = intent.getIntExtra(EX_PRESET_TAKEOFF, -1).takeIf { it >= 0 }
+        val ld = intent.getIntExtra(EX_PRESET_LANDING, -1).takeIf { it >= 0 }
+        val c = intent.getIntExtra(EX_PRESET_CONTACT, -1).takeIf { it >= 0 }
+        if (ev.isEmpty() && (to == null || ld == null)) return null
+        return AutoDetect.Result(takeoff = to, landing = ld, contact = c, events = ev,
+            error = if (test == TestType.DJ && c == null && ev.isEmpty()) "No se detectó el contacto inicial tras la caída; márcalo a mano." else null)
     }
 
     /** Si el archivo ya trae muchos cuadros por segundo, ese es el fps de captura; si no, se asume cámara lenta exportada. */
@@ -490,26 +513,7 @@ class AnalysisActivity : BaseActivity() {
     }
 
     /** Texto de asimetría si la otra pierna ya se midió hoy. */
-    private fun asymmetryNote(saved: Jump): String? {
-        val other = when (saved.test) {
-            TestType.CMJ_L -> TestType.CMJ_R
-            TestType.CMJ_R -> TestType.CMJ_L
-            else -> return null
-        }
-        val today = Store.ofAthlete(this, athlete).filter { it.day == saved.day }
-        val best = today.filter { it.test == saved.test }.maxOfOrNull { it.heightCm } ?: return null
-        val otherBest = today.filter { it.test == other }.maxOfOrNull { it.heightCm }
-            ?: return "Ahora mide la pierna ${if (other == TestType.CMJ_L) "izquierda" else "derecha"} para calcular la asimetría."
-        val l = if (saved.test == TestType.CMJ_L) best else otherBest
-        val r = if (saved.test == TestType.CMJ_R) best else otherBest
-        val pct = Calc.asymmetry(l, r)
-        val verdict = when {
-            pct >= 15 -> "alta: conviene trabajo unilateral"
-            pct >= 10 -> "moderada: vigilar"
-            else -> "dentro de lo normal"
-        }
-        return fmt("Asimetría de hoy: %.1f %% (%s)\nIzquierda %.1f cm · derecha %.1f cm", pct, verdict, l, r)
-    }
+    private fun asymmetryNote(saved: Jump): String? = JumpCalc.asymmetryNote(this, saved)
 
     private fun save() {
         val j = current ?: return

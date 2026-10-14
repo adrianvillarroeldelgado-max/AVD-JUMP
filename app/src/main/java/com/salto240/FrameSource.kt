@@ -108,13 +108,17 @@ class FrameSource(ctx: Context, uri: Uri) {
      */
     @Synchronized
     fun scanStrip(x0: Float, x1: Float, y0: Float, y1: Float, cols: Int = 96, rows: Int = 12,
-                  progress: (Int) -> Unit, cancelled: () -> Boolean): List<FloatArray>? {
-        val out = ArrayList<FloatArray>(frameCount)
+                  progress: (Int) -> Unit, cancelled: () -> Boolean,
+                  from: Int = 0, to: Int = frameCount): List<FloatArray>? {
+        val first = from.coerceIn(0, frameCount)
+        val last = to.coerceIn(first, frameCount)
+        val total = (last - first).coerceAtLeast(1)
+        val out = ArrayList<FloatArray>(last - first)
         val chunk = 16
-        var start = 0
-        while (start < frameCount) {
+        var start = first
+        while (start < last) {
             if (released || cancelled()) return null
-            val n = minOf(chunk, frameCount - start)
+            val n = minOf(chunk, last - start)
             val frames: List<Bitmap?> = try {
                 if (Build.VERSION.SDK_INT >= 30) {
                     val p = MediaMetadataRetriever.BitmapParams()
@@ -142,7 +146,7 @@ class FrameSource(ctx: Context, uri: Uri) {
                 out.add(strip)
             }
             start += n
-            progress(start * 100 / frameCount)
+            progress((start - first) * 100 / total)
         }
         return out
     }

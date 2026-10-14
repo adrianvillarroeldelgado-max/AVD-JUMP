@@ -22,7 +22,8 @@ object AutoDetect {
         val landing: Int? = null,
         val contact: Int? = null,          // Drop Jump: primer contacto tras caer del cajón
         val events: List<Int> = emptyList(), // Saltos repetidos: despegue, aterrizaje, …
-        val error: String? = null
+        val error: String? = null,
+        val preContact: Int? = null         // cuadros de apoyo continuo antes del (primer) despegue
     )
 
     /** Resta la media para que los cambios de luz (parpadeo LED a 240 fps) no cuenten como pie. */
@@ -115,7 +116,7 @@ object AutoDetect {
             TestType.RJ -> {
                 val ev = mutableListOf<Int>()
                 flights.forEach { (_, r) -> ev.add(r.start); ev.add(r.end + 1) }
-                Result(events = ev)
+                Result(events = ev, preContact = rs.getOrNull(flights.first().index - 1)?.len)
             }
             TestType.DJ -> {
                 // Vuelo precedido por un contacto que a su vez empieza tras una fase sin contacto (la caída del cajón).
@@ -127,8 +128,8 @@ object AutoDetect {
                     error = if (c == null) "No se detectó el contacto inicial tras la caída; márcalo a mano." else null)
             }
             else -> {
-                val f = flights.maxByOrNull { it.value.len }!!.value
-                Result(takeoff = f.start, landing = f.end + 1)
+                val f = flights.maxByOrNull { it.value.len }!!
+                Result(takeoff = f.value.start, landing = f.value.end + 1, preContact = rs.getOrNull(f.index - 1)?.len)
             }
         }
     }
