@@ -138,6 +138,14 @@ class CaptureActivity : BaseActivity() {
         }
         root.addView(top, FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.START).apply {
+            setMargins(dp(12), dp(12), dp(124), 0)
+        })
+        val helpBtn = button("Protocolo") {
+            if (!recording && !starting) startActivity(Intent(this, ProtocolActivity::class.java)
+                .putExtra(ProtocolActivity.EX_FOCUS, if (battery) "FV_BATTERY" else test.name))
+        }
+        root.addView(helpBtn, FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.END).apply {
             setMargins(dp(12), dp(12), dp(12), 0)
         })
 

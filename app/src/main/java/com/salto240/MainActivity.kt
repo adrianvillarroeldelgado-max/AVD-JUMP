@@ -157,20 +157,29 @@ class MainActivity : BaseActivity() {
         pEval.addView(button("Historial") { startActivity(Intent(this, HistoryActivity::class.java)) }, lp())
         root.addView(pEval, lp())
 
-        // Consejos
+        // Cómo grabar
         val pTips = panel()
         pTips.addView(caption("Cómo grabar"))
         pTips.addView(text(
-            "• Teléfono fijo a 1–2 m, lente a la altura de los tobillos.\n" +
-            "• Mucha luz: a 240 fps la imagen se oscurece y las luces LED parpadean.\n" +
-            "• Aterrizar con piernas extendidas, en el mismo sitio.\n" +
-            "• Asimetría: CMJ pierna izquierda y derecha el mismo día.\n" +
-            "• Perfil F-V: SJ o CMJ con 3–5 cargas el mismo día.\n" +
-            "• Al grabar, arrastra la línea naranja hasta donde apoyan los pies: las marcas salen solas.\n" +
-            "• En el análisis, las teclas de volumen avanzan o retroceden 1 cuadro.",
+            "• Teléfono en trípode, a 1,5–2,5 m y a 20–40 cm del piso.\n" +
+            "• Línea naranja justo donde la suela toca el piso.\n" +
+            "• Quieto 1–2 s, saltar, aterrizar en el mismo sitio con piernas extendidas y quedarse quieto 1 s.",
             14f, Col.INK
         ))
+        pTips.addView(button("Protocolo de grabación completo") {
+            startActivity(Intent(this, ProtocolActivity::class.java)
+                .putExtra(ProtocolActivity.EX_FOCUS, if (fvBattery) "FV_BATTERY" else test.name))
+        }, lp())
         root.addView(pTips, lp())
+
+        // Versión y actualizaciones
+        val ver = hbox(8)
+        ver.addView(text("AVD jump ${BuildConfig.VERSION_NAME}", 13f, Col.MUTED), lp(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        if (Updater.enabled) {
+            ver.addView(button("Buscar actualizaciones") { Updater.check(this, manual = true) },
+                lp(LinearLayout.LayoutParams.WRAP_CONTENT))
+        }
+        root.addView(ver, lp())
 
         setContentView(ScrollView(this).apply {
             setBackgroundColor(Col.BG)
@@ -206,6 +215,7 @@ class MainActivity : BaseActivity() {
     override fun onResume() {
         super.onResume()
         loadClients()
+        Updater.check(this)
     }
 
     private fun selectedClient(): Client? = clients.getOrNull(clientSpinner.selectedItemPosition)

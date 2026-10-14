@@ -29,6 +29,12 @@ jobs:
             echo "SIGNING_STORE_FILE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
           fi
 
+      - name: Versión de prueba
+        run: |
+          # Mismo código que una publicación: así el APK de prueba se instala encima de la versión actual.
+          echo "VERSION_CODE=$(( ($(git log -1 --format=%ct) - 1704067200) / 60 ))" >> "$GITHUB_ENV"
+          echo "VERSION_NAME=$(tr -d '[:space:]' < VERSION | cut -d. -f1-2)-prueba-$(git rev-parse --short HEAD)" >> "$GITHUB_ENV"
+
       - name: Compilar
         env:
           SIGNING_STORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
@@ -37,7 +43,7 @@ jobs:
         run: |
           chmod +x gradlew
           set -o pipefail
-          if ! ./gradlew assembleRelease --stacktrace --console=plain 2>&1 | tee gradle.log; then
+          if ! ./gradlew assembleGithubRelease --stacktrace --console=plain 2>&1 | tee gradle.log; then
             # Muestra el error como anotación para leerlo sin abrir el registro completo.
             msg=$(grep -E "^e: |What went wrong|^> |error:|Could not|Unresolved|FAILED" gradle.log | head -60 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
             echo "::error title=Error de compilación::$msg"
@@ -47,4 +53,4 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: AVD-jump-apk
-          path: app/build/outputs/apk/release/*.apk
+          path: app/build/outputs/apk/github/release/*.apk

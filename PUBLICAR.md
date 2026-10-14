@@ -51,20 +51,18 @@ En el repositorio: **Settings › Secrets and variables › Actions › New repo
 
 Guarda el zip de la firma en un lugar seguro (por ejemplo, Google Drive personal). Si se pierde, las versiones nuevas no se podrán instalar encima: habrá que desinstalar la app y se perderán los datos del teléfono.
 
-## 4. Publicar una versión
+## 4. Publicar una versión (automático)
 
-**Forma rápida:** cambia el número del archivo `VERSION` (por ejemplo de `1.5.0` a `1.5.1`) y guarda el cambio en `main`. GitHub compila, firma y publica la versión solo, y crea la etiqueta `v1.5.1`.
+**Cada cambio que llega a la rama `main` publica una versión nueva sola.** GitHub compila, firma y publica en Releases (6–8 min) con el número `1.6.N`, donde `N` sube en cada publicación. Los cambios que solo tocan `docs/`, `play/` o archivos `.md` no publican versión.
 
-**Forma manual, desde Releases:**
+En cada versión aparecen `AVD-jump.apk`, `AVD-jump-1.6.N.apk`, `AVD-jump-1.6.N-play.aab` (para Google Play) y `version.json` (lo consulta la app).
 
-1. En el repositorio: **Releases › Create a new release** (o *Draft a new release*).
-2. En **Choose a tag** escribe `v1.5.0` y pulsa **Create new tag**.
-3. Título: `AVD jump 1.5.0`. Pulsa **Publish release**.
-4. Ve a **Actions**: el flujo **Publicar versión** compila y firma el APK y el AAB (6–8 min).
-5. Al terminar, en la versión aparecen `AVD-jump.apk`, `AVD-jump-1.5.0.apk` y `AVD-jump-1.5.0-play.aab` (este último es para Google Play).
-
-Para cada actualización repite este paso con un número mayor: `v1.5.1`, `v1.6.0`…
-El número interno de versión se calcula solo, así que Android la reconoce como actualización.
+- **Actualización en los teléfonos:** desde la 1.6, la app instalada desde GitHub revisa al abrirse (como máximo cada 3 horas) si hay una versión nueva y ofrece **Actualizar**. Descarga el APK y Android pide confirmar con un toque. Se instala encima: no se pierden clientes ni saltos. También hay un botón **Buscar actualizaciones** al final de la pantalla de inicio.
+- **La primera vez** Android pide activar "Permitir de esta fuente" para AVD jump. Solo una vez.
+- **Quien tenga la 1.5.0** debe instalar la 1.6 a mano una vez (desde la página de descarga); de ahí en adelante se actualiza sola.
+- **Probar sin publicar:** trabaja en otra rama. Cada cambio en una rama genera un APK de prueba en **Actions** (artefacto *AVD-jump-apk*) que se instala encima de la versión actual, pero no llega a los demás teléfonos hasta unirlo a `main`.
+- **Cambiar 1.6 a 1.7:** edita el archivo `VERSION` en `main` (por ejemplo `1.7`).
+- **Publicar a mano de nuevo la última versión:** pestaña **Actions › Publicar versión › Run workflow**.
 
 ## 5. Activar la página de descarga
 

@@ -69,6 +69,11 @@
             android:windowSoftInputMode="adjustResize" />
 
         <activity
+            android:name=".ProtocolActivity"
+            android:exported="false"
+            android:screenOrientation="portrait" />
+
+        <activity
             android:name=".HistoryActivity"
             android:exported="false"
             android:screenOrientation="portrait" />

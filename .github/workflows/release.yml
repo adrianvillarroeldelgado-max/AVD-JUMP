@@ -1,27 +1,29 @@
 name: Publicar versión
 
-# Al crear una versión (etiqueta v1.3.0, v1.4.0…) compila el APK firmado y lo publica en GitHub Releases.
+# Cada cambio que llega a main publica una versión nueva en GitHub Releases (1.6.4, 1.6.5…).
+# Las apps instaladas desde GitHub la detectan al abrirse y ofrecen actualizar.
 # Enlace fijo a la última versión: https://github.com/<usuario>/<repositorio>/releases/latest/download/AVD-jump.apk
+# El archivo VERSION fija los dos primeros números (1.6); el tercero es el número de publicación.
 on:
   push:
-    tags: ["v*"]
-    # Cambiar el número del archivo VERSION en main publica esa versión.
     branches: ["main"]
-    paths: ["VERSION"]
+    paths-ignore: ["docs/**", "play/**", "**.md"]
   workflow_dispatch:
-    inputs:
-      version:
-        description: "Versión a publicar (p. ej. 1.3.0)"
-        required: true
 
 permissions:
   contents: write
+
+concurrency:
+  group: publicar
+  cancel-in-progress: false
 
 jobs:
   release:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-java@v5
         with:
@@ -33,12 +35,17 @@ jobs:
 
       - name: Versión
         run: |
-          if [ -n "${{ github.event.inputs.version }}" ]; then V="${{ github.event.inputs.version }}"
-          elif [ "${{ github.ref_type }}" = "tag" ]; then V="${GITHUB_REF_NAME#v}"
-          else V="$(tr -d '[:space:]' < VERSION)"; fi
+          BASE="$(tr -d '[:space:]' < VERSION | cut -d. -f1-2)"
+          V="$BASE.${{ github.run_number }}"
           echo "VERSION_NAME=$V" >> "$GITHUB_ENV"
-          echo "VERSION_CODE=$((100 + ${{ github.run_number }}))" >> "$GITHUB_ENV"
+          # Minutos desde 2024 del último cambio: siempre sube (la 1.5.0 tenía el código 103).
+          echo "VERSION_CODE=$(( ($(git log -1 --format=%ct) - 1704067200) / 60 ))" >> "$GITHUB_ENV"
           echo "TAG=v$V" >> "$GITHUB_ENV"
+          # Novedades: los cambios desde la versión anterior.
+          PREV="$(git describe --tags --abbrev=0 HEAD 2>/dev/null || true)"
+          if [ -n "$PREV" ]; then RANGE="$PREV..HEAD"; else RANGE="-5"; fi
+          git log $RANGE --no-merges --format='• %s' | head -15 > notes.txt
+          cat notes.txt
 
       - name: Preparar firma
         env:
@@ -59,16 +66,38 @@ jobs:
         run: |
           chmod +x gradlew
           set -o pipefail
-          if ! ./gradlew assembleRelease bundleRelease --stacktrace --console=plain 2>&1 | tee gradle.log; then
+          if ! ./gradlew assembleGithubRelease bundlePlayRelease --stacktrace --console=plain 2>&1 | tee gradle.log; then
             # Muestra el error como anotación para leerlo sin abrir el registro completo.
             msg=$(grep -E "^e: |What went wrong|^> |error:|Could not|Unresolved|FAILED" gradle.log | head -60 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
             echo "::error title=Error de compilación::$msg"
             exit 1
           fi
           mkdir -p dist
-          cp app/build/outputs/apk/release/app-release.apk "dist/AVD-jump-$VERSION_NAME.apk"
-          cp app/build/outputs/apk/release/app-release.apk dist/AVD-jump.apk
-          cp app/build/outputs/bundle/release/app-release.aab "dist/AVD-jump-$VERSION_NAME-play.aab"
+          cp app/build/outputs/apk/github/release/app-github-release.apk "dist/AVD-jump-$VERSION_NAME.apk"
+          cp app/build/outputs/apk/github/release/app-github-release.apk dist/AVD-jump.apk
+          cp app/build/outputs/bundle/playRelease/app-play-release.aab "dist/AVD-jump-$VERSION_NAME-play.aab"
+          # Lo consulta la app instalada para saber si hay una versión nueva.
+          python3 - <<'PY'
+          import json, os
+          notes = open("notes.txt", encoding="utf-8").read().strip()
+          json.dump({
+              "versionCode": int(os.environ["VERSION_CODE"]),
+              "versionName": os.environ["VERSION_NAME"],
+              "apk": f"https://github.com/{os.environ['GITHUB_REPOSITORY']}/releases/download/{os.environ['TAG']}/AVD-jump-{os.environ['VERSION_NAME']}.apk",
+              "notes": notes,
+          }, open("dist/version.json", "w", encoding="utf-8"), ensure_ascii=False)
+          PY
+          cat dist/version.json
+          {
+            echo "**Descargar:** AVD-jump.apk (abajo, en *Assets*). Si ya tienes AVD jump 1.6 o posterior, la app avisa sola al abrirse."
+            echo
+            echo "**Novedades**"
+            cat notes.txt
+            echo
+            echo "El archivo .aab es para subir a Google Play Console; no se instala en el teléfono."
+            echo
+            echo "Primera instalación: abre el APK en el teléfono y permite “Instalar apps desconocidas”. Requiere Android 9 o superior."
+          } > release.md
 
       - name: Publicar en GitHub Releases
         uses: softprops/action-gh-release@v2
@@ -79,9 +108,5 @@ jobs:
             dist/AVD-jump-${{ env.VERSION_NAME }}.apk
             dist/AVD-jump.apk
             dist/AVD-jump-${{ env.VERSION_NAME }}-play.aab
-          body: |
-            **Descargar:** AVD-jump.apk (abajo, en *Assets*).
-
-            El archivo .aab es para subir a Google Play Console; no se instala en el teléfono.
-
-            Instalación: abre el archivo en el teléfono y permite “Instalar apps desconocidas” para tu navegador o administrador de archivos. Requiere Android 9 o superior.
+            dist/version.json
+          body_path: release.md

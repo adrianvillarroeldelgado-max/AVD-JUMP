@@ -25,9 +25,25 @@ android {
         applicationId = "com.avd.jump"
         minSdk = 28          // necesario para leer cuadros por índice (getFrameAtIndex)
         targetSdk = 36
-        // En GitHub Releases el número de versión sale de la etiqueta (v1.3.0) y el código del número de ejecución.
+        // El código de versión lo calcula GitHub (minutos desde 2024 del último cambio), así siempre sube
+        // y cada versión nueva se instala encima de la anterior. La 1.5.0 publicada tenía el código 103.
         versionCode = System.getenv("VERSION_CODE")?.toIntOrNull() ?: 6
-        versionName = System.getenv("VERSION_NAME")?.takeIf { it.isNotBlank() } ?: "1.5.0"
+        versionName = System.getenv("VERSION_NAME")?.takeIf { it.isNotBlank() } ?: "1.6-dev"
+        // Repositorio donde la versión de GitHub busca actualizaciones.
+        val repo = System.getenv("GITHUB_REPOSITORY")?.takeIf { it.isNotBlank() } ?: "adrianvillarroeldelgado-max/AVD-JUMP"
+        buildConfigField("String", "UPDATE_REPO", "\"$repo\"")
+    }
+
+    buildFeatures {
+        buildConfig = true
+    }
+
+    // github: APK de descarga directa, se actualiza sola desde GitHub Releases.
+    // play: paquete para Google Play (Play se encarga de las actualizaciones; sin permiso de internet).
+    flavorDimensions += "canal"
+    productFlavors {
+        create("github") { dimension = "canal" }
+        create("play") { dimension = "canal" }
     }
 
     signingConfigs {
