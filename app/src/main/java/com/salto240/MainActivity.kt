@@ -216,6 +216,9 @@ class MainActivity : BaseActivity() {
         super.onResume()
         loadClients()
         Updater.check(this)
+        // Borra en segundo plano las grabaciones descartadas que no quedaron ligadas a ningún salto.
+        val app = applicationContext
+        Thread { try { Videos.cleanOrphans(app) } catch (_: Exception) {} }.start()
     }
 
     private fun selectedClient(): Client? = clients.getOrNull(clientSpinner.selectedItemPosition)
@@ -301,6 +304,8 @@ class MainActivity : BaseActivity() {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == REQ_PICK && resultCode == RESULT_OK) {
             val uri = data?.data ?: return
+            // Permiso permanente de lectura: el video queda enlazado al salto para revisarlo después.
+            try { contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) {}
             val i = testIntent(AnalysisActivity::class.java)
             i.putExtra(EX_URI, uri.toString())
             i.putExtra(EX_FPS, 0) // desconocido: se pregunta en el análisis

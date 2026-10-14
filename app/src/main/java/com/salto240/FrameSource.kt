@@ -88,26 +88,29 @@ class FrameSource(ctx: Context, uri: Uri) {
     private fun rawNeedsRotate(b: Bitmap) = (rotation == 90 || rotation == 270 || rotation == 180) &&
             rawW > 0 && b.width == rawW && b.height == rawH && (rawW != rawH || rotation == 180)
 
-    /** Lee un píxel en coordenadas normalizadas de la imagen tal como se muestra (ya girada) y devuelve su gris. */
-    private fun grayAt(b: Bitmap, u: Float, v: Float, rotate: Boolean): Float {
+    /** Índice del píxel (en el cuadro tal como lo entrega el decodificador) para coordenadas normalizadas de la imagen mostrada. */
+    private fun rawIndex(w: Int, h: Int, u: Float, v: Float, rotate: Boolean): Int {
         var x: Float; var y: Float
         if (!rotate) { x = u; y = v } else when (rotation) {
             90 -> { x = v; y = 1f - u }
             270 -> { x = 1f - v; y = u }
             else -> { x = 1f - u; y = 1f - v }
         }
-        val px = (x * b.width).toInt().coerceIn(0, b.width - 1)
-        val py = (y * b.height).toInt().coerceIn(0, b.height - 1)
-        val c = b.getPixel(px, py)
-        return (((c shr 16) and 0xFF) * 3 + ((c shr 8) and 0xFF) * 6 + (c and 0xFF)) / 10f
+        val px = (x * w).toInt().coerceIn(0, w - 1)
+        val py = (y * h).toInt().coerceIn(0, h - 1)
+        return py * w + px
     }
+
+    private var pixBuf = IntArray(0)
+
+    private fun gray(c: Int) = (((c shr 16) and 0xFF) * 3 + ((c shr 8) and 0xFF) * 6 + (c and 0xFF)) / 10f
 
     /**
      * Recorre todos los cuadros y devuelve, para cada uno, los grises de una franja
      * (coordenadas normalizadas de la imagen mostrada). Lo usa la detección automática.
      */
     @Synchronized
-    fun scanStrip(x0: Float, x1: Float, y0: Float, y1: Float, cols: Int = 96, rows: Int = 12,
+    fun scanStrip(x0: Float, x1: Float, y0: Float, y1: Float, cols: Int = AutoDetect.COLS, rows: Int = AutoDetect.ROWS,
                   progress: (Int) -> Unit, cancelled: () -> Boolean,
                   from: Int = 0, to: Int = frameCount): List<FloatArray>? {
         val first = from.coerceIn(0, frameCount)
@@ -132,11 +135,19 @@ class FrameSource(ctx: Context, uri: Uri) {
                 val strip = FloatArray(cols * rows)
                 if (b != null) {
                     val rot = rawNeedsRotate(b)
+                    val w = b.width; val h = b.height
+                    if (pixBuf.size != w * h) pixBuf = IntArray(w * h)
+                    b.getPixels(pixBuf, 0, w, 0, 0, w, h)   // una sola copia por cuadro: mucho más rápido que getPixel
+                    // Cada celda promedia 2×2 píxeles vecinos: menos ruido a 240 fps con poca luz.
+                    val du = 0.5f / w; val dv = 0.5f / h
                     for (r in 0 until rows) {
                         val v = y0 + (y1 - y0) * (r + 0.5f) / rows
                         for (c in 0 until cols) {
                             val u = x0 + (x1 - x0) * (c + 0.5f) / cols
-                            strip[r * cols + c] = grayAt(b, u, v, rot)
+                            strip[r * cols + c] = (gray(pixBuf[rawIndex(w, h, u, v, rot)]) +
+                                gray(pixBuf[rawIndex(w, h, u + du, v, rot)]) +
+                                gray(pixBuf[rawIndex(w, h, u, v + dv, rot)]) +
+                                gray(pixBuf[rawIndex(w, h, u + du, v + dv, rot)])) / 4f
                         }
                     }
                     b.recycle()

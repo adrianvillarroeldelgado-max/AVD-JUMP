@@ -9,6 +9,8 @@ import android.view.ViewGroup
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.ListView
+import android.widget.Toast
+import android.widget.LinearLayout
 import android.widget.Spinner
 import android.widget.TextView
 import java.util.Locale
@@ -16,6 +18,7 @@ import java.util.Locale
 class HistoryActivity : BaseActivity() {
 
     private lateinit var spinner: Spinner
+    private lateinit var videoInfo: TextView
     private lateinit var groupSpinner: Spinner
     private var groups: List<Group> = emptyList()
     private lateinit var summary: TextView
@@ -49,7 +52,14 @@ class HistoryActivity : BaseActivity() {
             dividerHeight = 1
         }
         root.addView(list, lp(h = 0, weight = 1f))
-        root.addView(text("Mantén pulsado un salto para borrarlo.", 12f, Col.MUTED))
+        root.addView(text("Toca un salto para ver su video o medirlo a mano. Mantén pulsado para borrarlo.", 12f, Col.MUTED))
+
+        // Videos de las evaluaciones: espacio usado, ajuste y limpieza.
+        val vRow = hbox(8)
+        videoInfo = text("", 13f, Col.INK)
+        vRow.addView(videoInfo, lp(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        vRow.addView(button("Videos") { videoMenu() }, lp(LinearLayout.LayoutParams.WRAP_CONTENT))
+        root.addView(vRow, lp())
 
         root.addView(button("Compartir CSV (Excel, Sheets, WhatsApp…)", true) { shareCsv() }, lp())
         setContentView(root)
@@ -58,6 +68,7 @@ class HistoryActivity : BaseActivity() {
             override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) = refresh()
             override fun onNothingSelected(parent: AdapterView<*>?) {}
         }
+        list.setOnItemClickListener { _, _, pos, _ -> jumpMenu(rows[pos]) }
         list.setOnItemLongClickListener { _, _, pos, _ ->
             val j = rows[pos]
             AlertDialog.Builder(this)
@@ -72,6 +83,7 @@ class HistoryActivity : BaseActivity() {
             override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) = loadNames()
             override fun onNothingSelected(parent: AdapterView<*>?) {}
         }
+        preselect = intent.getStringExtra(MainActivity.EX_ATHLETE)
         loadGroups()
     }
 
@@ -92,9 +104,77 @@ class HistoryActivity : BaseActivity() {
         val g = selectedGroup()
         names = listOf("Todos") + (if (g == null) Store.athletes(this) else Clients.inGroup(this, g.id).map { it.name })
         spinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, names)
-        val idx = names.indexOf(prev)
+        val wanted = prev ?: preselect
+        preselect = null
+        val idx = names.indexOf(wanted)
         if (idx >= 0) spinner.setSelection(idx)
         refresh()
+    }
+
+    /** Atleta a mostrar al abrir (desde el historial de evaluaciones de un cliente). */
+    private var preselect: String? = null
+
+    private fun refreshVideoInfo() {
+        val n = Videos.count(this)
+        videoInfo.text = (if (Videos.enabled(this)) "Videos: se guardan" else "Videos: no se guardan") +
+            " · " + n + (if (n == 1) " salto con video" else " saltos con video") + " · " + Videos.humanSize(Videos.usedBytes(this))
+    }
+
+    private fun videoMenu() {
+        val on = Videos.enabled(this)
+        val opts = arrayOf(
+            if (on) "No guardar los videos de los próximos saltos" else "Guardar los videos de los próximos saltos",
+            "Borrar todos los videos (los resultados se conservan)"
+        )
+        AlertDialog.Builder(this)
+            .setTitle("Videos de las evaluaciones")
+            .setItems(opts) { _, w ->
+                if (w == 0) { Videos.setEnabled(this, !on); refreshVideoInfo() }
+                else AlertDialog.Builder(this)
+                    .setTitle("¿Borrar todos los videos?")
+                    .setMessage("Se libera " + Videos.humanSize(Videos.usedBytes(this)) + ". Los resultados de los saltos no se borran, pero ya no se podrán volver a medir a mano.")
+                    .setPositiveButton("Borrar videos") { _, _ -> Videos.removeAll(this); refresh() }
+                    .setNegativeButton("Cancelar", null)
+                    .show()
+            }
+            .show()
+    }
+
+    private fun jumpMenu(j: Jump) {
+        val has = j.video != null
+        val avail = has && Videos.available(this, j.video)
+        val labels = ArrayList<String>(); val acts = ArrayList<() -> Unit>()
+        if (avail) {
+            labels.add("Ver video y medir a mano"); acts.add {
+                if (!Videos.openForReview(this, j)) Toast.makeText(this, "El video ya no está disponible.", Toast.LENGTH_LONG).show()
+            }
+            labels.add("Guardar video en la galería"); acts.add {
+                Thread {
+                    val msg = Videos.exportToGallery(this, j)
+                    runOnUiThread { Toast.makeText(this, msg, Toast.LENGTH_LONG).show() }
+                }.start()
+            }
+        }
+        if (has) { labels.add("Quitar el video de este salto"); acts.add { Videos.removeFromJump(this, j); refresh() } }
+        labels.add("Borrar salto"); acts.add {
+            AlertDialog.Builder(this)
+                .setTitle("¿Borrar este salto?")
+                .setMessage(String.format(Locale.getDefault(), "%s · %s · %.1f cm\n%s", j.athlete, j.test.label, j.heightCm, j.date))
+                .setPositiveButton("Borrar") { _, _ -> Store.delete(this, j.id); loadNames() }
+                .setNegativeButton("Cancelar", null)
+                .show()
+        }
+        val title = String.format(Locale.getDefault(), "%s · %.1f cm", j.test.label, j.heightCm)
+        AlertDialog.Builder(this)
+            .setTitle(title)
+            .setMessage(when {
+                avail -> j.date + " · " + j.athlete + " · video guardado (" + j.fps + " fps)"
+                has -> j.date + " · " + j.athlete + " · el video ya no está en el teléfono"
+                else -> j.date + " · " + j.athlete + " · sin video"
+            })
+            .setItems(labels.toTypedArray()) { _, w -> acts[w]() }
+            .setNegativeButton("Cerrar", null)
+            .show()
     }
 
     private fun refresh() {
@@ -120,6 +200,7 @@ class HistoryActivity : BaseActivity() {
         }
         if (rows.isEmpty()) sb.append("\n\nAún no hay saltos guardados.")
         summary.text = sb.toString()
+        refreshVideoInfo()
 
         list.adapter = object : ArrayAdapter<Jump>(this, android.R.layout.simple_list_item_2, android.R.id.text1, rows) {
             override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
@@ -140,6 +221,7 @@ class HistoryActivity : BaseActivity() {
                     String.format(Locale.getDefault(), " · TC %.0f ms · RSI %.2f", j.contactMs, j.rsi) else ""
                 if (j.reps.isNotEmpty()) extra += String.format(Locale.getDefault(), " · %d saltos", j.reps.size)
                 j.fatiguePct?.let { extra += String.format(Locale.getDefault(), " · caída %.1f %%", it) }
+                if (j.video != null) extra += " · video"
                 t2.text = String.format(Locale.getDefault(), "%s · %s · TV %.0f ms%s%s",
                     j.date, j.athlete, j.flightMs, extra, if (j.notes.isNotEmpty()) " · " + j.notes else "")
                 t2.setTextColor(Col.MUTED)

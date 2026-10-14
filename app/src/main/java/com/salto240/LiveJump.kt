@@ -32,28 +32,36 @@ class LiveDetector(private val test: TestType) {
 
     private val ts = ArrayList<Long>()
     private val strips = ArrayList<FloatArray>()
+    private var originNs = 0L
     private var lastRunNs = 0L
 
     fun reset() {
-        ts.clear(); strips.clear(); lastRunNs = 0L
+        ts.clear(); strips.clear(); lastRunNs = 0L; originNs = 0L
     }
 
     /** Tiempo tras el último aterrizaje antes de dar el salto por terminado. */
     private val settleS = if (test == TestType.RJ) 1.2 else 0.45
+    /** Se conservan los últimos segundos de vista previa (el salto y el apoyo previo caben de sobra). */
+    private val keepS = if (test == TestType.RJ) 14.0 else 6.0
 
-    /** Agrega un cuadro de la vista previa. Devuelve el salto cuando el atleta ya aterrizó y se estabilizó. */
+    /**
+     * Agrega un cuadro de la vista previa (llamar siempre desde el mismo hilo, no el principal).
+     * Devuelve el salto cuando el atleta ya aterrizó y se estabilizó.
+     */
     fun add(tNs: Long, strip: FloatArray): Live? {
         if (ts.isNotEmpty() && tNs <= ts.last()) return null
+        if (ts.isEmpty()) originNs = tNs
         ts.add(tNs); strips.add(strip)
+        while (ts.size > 2 && (tNs - ts[0]) / 1e9 > keepS) { ts.removeAt(0); strips.removeAt(0) }
         val dur = (tNs - ts[0]) / 1e9
-        if (dur < 1.0 || strips.size < 20) return null
-        // AutoDetect es barato con franjas pequeñas, pero no hace falta correrlo en cada cuadro.
+        if (dur < 1.0 || strips.size < 15) return null
         if (tNs - lastRunNs < 150_000_000L) return null
         lastRunNs = tNs
 
         val fps = (strips.size - 1) / dur
         val r = AutoDetect.detect(strips, fps.roundToInt().coerceAtLeast(10), test)
-        fun sec(i: Int) = (ts[i.coerceIn(0, ts.size - 1)] - ts[0]) / 1e9
+        fun sec(i: Int) = (ts[i.coerceIn(0, ts.size - 1)] - originNs) / 1e9
+        val now = (tNs - originNs) / 1e9
         // El atleta debe estar quieto sobre el suelo antes de despegar (descarta a alguien que entra caminando).
         // En el Drop Jump el apoyo previo es el contacto corto tras la caída, así que no se exige.
         if (test != TestType.DJ) {
@@ -64,13 +72,14 @@ class LiveDetector(private val test: TestType) {
         return if (test == TestType.RJ) {
             val ev = r.events
             if (ev.size < 2 || ev.size % 2 != 0) return null
-            if (sec(ev.last()) > dur - settleS) return null
+            if (sec(ev.last()) > now - settleS) return null
             Live(sec(ev.first()), sec(ev.last()), null, ev.map { sec(it) }, fps)
         } else {
             val to = r.takeoff ?: return null
             val ld = r.landing ?: return null
-            if (sec(ld) > dur - settleS) return null
+            if (sec(ld) > now - settleS) return null
             if (sec(ld) - sec(to) > 1.0) return null   // más de 1 s "en el aire": salió del encuadre, no es un salto
+            if (test == TestType.DJ && r.contact == null) return null
             Live(sec(to), sec(ld), r.contact?.let { sec(it) }, emptyList(), fps)
         }
     }
@@ -79,20 +88,20 @@ class LiveDetector(private val test: TestType) {
         /** Tramo del video de alta velocidad (en cuadros) que contiene el salto, con margen. */
         fun window(l: Live, test: TestType, fps: Int, frameCount: Int): IntRange {
             val startS = when {
-                test == TestType.RJ -> (l.eventsS.firstOrNull() ?: l.takeoffS ?: 0.0) - 0.8
-                test == TestType.DJ -> (l.contactS ?: l.takeoffS ?: 0.0) - 0.8
-                else -> (l.takeoffS ?: 0.0) - 0.8
+                test == TestType.RJ -> (l.eventsS.firstOrNull() ?: l.takeoffS ?: 0.0) - 1.0
+                test == TestType.DJ -> (l.contactS ?: l.takeoffS ?: 0.0) - 1.0
+                else -> (l.takeoffS ?: 0.0) - 1.0
             }
-            val endS = (l.eventsS.lastOrNull()?.takeIf { test == TestType.RJ } ?: l.landingS ?: 0.0) + 0.4
+            val endS = (l.eventsS.lastOrNull()?.takeIf { test == TestType.RJ } ?: l.landingS ?: 0.0) + 0.45
             val a = (startS * fps).roundToInt().coerceIn(0, (frameCount - 1).coerceAtLeast(0))
             val b = (endS * fps).roundToInt().coerceIn(a, (frameCount - 1).coerceAtLeast(a))
             return a..b
         }
 
-        /** Grises de la franja del suelo en un cuadro de la vista previa (coordenadas normalizadas de la vista). */
-        fun strip(b: Bitmap, floorV: Float, x0: Float = 0.12f, x1: Float = 0.88f, cols: Int = 48, rows: Int = 6): FloatArray {
-            val y1 = floorV
-            val y0 = (floorV - 0.035f).coerceAtLeast(0f)
+        /** Grises de la banda del suelo en un cuadro de la vista previa (misma geometría que el video). */
+        fun strip(b: Bitmap, floorV: Float): FloatArray {
+            val cols = AutoDetect.COLS; val rows = AutoDetect.ROWS
+            val y0 = AutoDetect.bandTop(floorV); val y1 = AutoDetect.bandBottom(floorV)
             val out = FloatArray(cols * rows)
             val row = IntArray(b.width)
             for (r in 0 until rows) {
@@ -100,7 +109,7 @@ class LiveDetector(private val test: TestType) {
                 val py = (v * b.height).toInt().coerceIn(0, b.height - 1)
                 b.getPixels(row, 0, b.width, 0, py, b.width, 1)
                 for (c in 0 until cols) {
-                    val u = x0 + (x1 - x0) * (c + 0.5f) / cols
+                    val u = AutoDetect.X0 + (AutoDetect.X1 - AutoDetect.X0) * (c + 0.5f) / cols
                     val px = (u * b.width).toInt().coerceIn(0, b.width - 1)
                     val p = row[px]
                     out[r * cols + c] = (((p shr 16) and 0xFF) * 3 + ((p shr 8) and 0xFF) * 6 + (p and 0xFF)) / 10f

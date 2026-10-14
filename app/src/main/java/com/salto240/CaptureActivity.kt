@@ -77,6 +77,11 @@ class CaptureActivity : BaseActivity() {
     private lateinit var cardDetail: TextView
     private lateinit var cardButtons: LinearLayout
     private val work = Executors.newSingleThreadExecutor()
+    /** Hilo de la detección en vivo: la vista previa no se traba mientras se analiza. */
+    private val liveExec = Executors.newSingleThreadExecutor()
+    @Volatile private var liveBusy = 0
+    /** Petición de grabación vigente (para bloquear la exposición una vez estabilizada). */
+    private var recRequest: CaptureRequest.Builder? = null
     private val prefs get() = getSharedPreferences("salto240", MODE_PRIVATE)
 
     companion object {
@@ -387,8 +392,12 @@ class CaptureActivity : BaseActivity() {
                         s.setRepeatingRequest(b.build(), null, camHandler)
                     }
                     r.start()
+                    // Bloquea exposición y balance de blancos tras estabilizarse: la luz no cambia a mitad del salto.
+                    recRequest = b
+                    main.postDelayed({ lockExposure(s, b) }, 600)
                     main.post {
-                        detector.reset()
+                        liveGen++
+                        liveExec.execute { detector.reset() }
                         lastPreviewTs = 0L
                         liveHandled = false
                         recording = true; starting = false
@@ -421,6 +430,22 @@ class CaptureActivity : BaseActivity() {
         } catch (e: Exception) {
             toast("No se pudo iniciar la grabación: ${e.message}")
             failBackToPreview()
+        }
+    }
+
+    private fun lockExposure(s: CameraCaptureSession, b: CaptureRequest.Builder) {
+        if (!recording || session !== s) return
+        val c = cfg ?: return
+        try {
+            b.set(CaptureRequest.CONTROL_AE_LOCK, true)
+            b.set(CaptureRequest.CONTROL_AWB_LOCK, true)
+            if (c.highSpeed && s is CameraConstrainedHighSpeedCaptureSession) {
+                s.setRepeatingBurst(s.createHighSpeedRequestList(b.build()), null, camHandler)
+            } else {
+                s.setRepeatingRequest(b.build(), null, camHandler)
+            }
+        } catch (_: Exception) {
+            // Algunos teléfonos no aceptan el bloqueo en cámara lenta: se sigue sin él.
         }
     }
 
@@ -522,10 +547,25 @@ class CaptureActivity : BaseActivity() {
             liveBmp = b
         }
         try { texture.getBitmap(b!!) } catch (_: Exception) { return }
-        val res = detector.add(t, LiveDetector.strip(b, guideFrac)) ?: return
-        liveHandled = true
-        onLiveJump(res)
+        val strip = LiveDetector.strip(b, guideFrac)
+        // Si el análisis se atrasa, se descartan cuadros sueltos en lugar de acumular trabajo.
+        if (liveBusy > 3) return
+        liveBusy++
+        val gen = liveGen
+        liveExec.execute {
+            val res = try { detector.add(t, strip) } catch (_: Exception) { null }
+            main.post {
+                liveBusy--
+                if (res != null && gen == liveGen && recording && !liveHandled) {
+                    liveHandled = true
+                    onLiveJump(res)
+                }
+            }
+        }
     }
+
+    /** Cambia en cada grabación: descarta resultados de una grabación anterior. */
+    @Volatile private var liveGen = 0
 
     private fun fmt(p: String, vararg a: Any?) = String.format(Locale.getDefault(), p, *a)
 
@@ -560,20 +600,31 @@ class CaptureActivity : BaseActivity() {
             try {
                 val src = FrameSource(this, Uri.fromFile(f))
                 try {
-                    val y0 = (g - 0.035f).coerceAtLeast(0f)
                     fun scan(range: IntRange?): AutoDetect.Result? {
-                        val strips = if (range == null) src.scanStrip(0.12f, 0.88f, y0, g, progress = {}, cancelled = { isFinishing })
-                            else src.scanStrip(0.12f, 0.88f, y0, g, progress = {}, cancelled = { isFinishing },
+                        val strips = if (range == null) src.scanStrip(AutoDetect.X0, AutoDetect.X1, AutoDetect.bandTop(g), AutoDetect.bandBottom(g), progress = {}, cancelled = { isFinishing })
+                            else src.scanStrip(AutoDetect.X0, AutoDetect.X1, AutoDetect.bandTop(g), AutoDetect.bandBottom(g), progress = {}, cancelled = { isFinishing },
                                 from = range.first, to = range.last + 1)
                         val res = strips?.let { AutoDetect.detect(it, fps, t) } ?: return null
                         return if (range == null) res else res.shift(range.first)
                     }
                     fun ok(x: AutoDetect.Result?) = x != null &&
                         (if (t == TestType.RJ) x.events.size >= 2 else x.takeoff != null && x.landing != null)
+                    fun flightS(x: AutoDetect.Result?): Double? = when {
+                        x == null -> null
+                        t == TestType.RJ -> x.events.takeIf { it.size >= 2 }?.let { (it[1] - it[0]).toDouble() / fps }
+                        x.takeoff != null && x.landing != null -> (x.landing - x.takeoff).toDouble() / fps
+                        else -> null
+                    }
+                    val liveFlight = if (t == TestType.RJ) l.eventsS.takeIf { it.size >= 2 }?.let { it[1] - it[0] } else l.flightS
+                    fun off(x: AutoDetect.Result?): Double = flightS(x)?.let { f -> liveFlight?.let { abs(f - it) } } ?: 9.0
                     val n = src.frameCount
                     if (n > 1) {
                         r = scan(LiveDetector.window(l, t, fps, n))
-                        if (!ok(r)) r = scan(null)            // respaldo: todo el video
+                        // Si no salió, o difiere mucho de la vista previa, se analiza el video entero y se queda el más coherente.
+                        if (!ok(r) || off(r) > 0.08) {
+                            val full = scan(null)
+                            if (ok(full) && (!ok(r) || off(full) < off(r))) r = full
+                        }
                         if (!ok(r)) r = null
                     }
                 } finally {
@@ -625,11 +676,16 @@ class CaptureActivity : BaseActivity() {
         info.text = "Salto medido."
         showCard(status, fmt("%.1f cm", out.jump.heightCm), 0xFFFFFFFF.toInt(), out.detail)
         cardButtons.addView(button("Guardar y siguiente", true) {
-            Store.add(this, out.jump)
-            val note = JumpCalc.asymmetryNote(this, out.jump)
-            Toast.makeText(this, fmt("Guardado: %.1f cm", out.jump.heightCm) + (note?.let { "\n$it" } ?: ""),
-                Toast.LENGTH_LONG).show()
-            f.delete()
+            // El video queda ligado al salto: se puede revisar o volver a medir a mano desde el historial.
+            val keep = Videos.enabled(this)
+            val mk = if (test == TestType.DJ) listOfNotNull(r?.contact, r?.takeoff, r?.landing).takeIf { it.size == 3 }
+                else listOfNotNull(r?.takeoff, r?.landing).takeIf { it.size == 2 }
+            val saved = out.jump.copy(video = if (keep) Uri.fromFile(f).toString() else null, marks = mk ?: emptyList())
+            Store.add(this, saved)
+            val note = JumpCalc.asymmetryNote(this, saved)
+            Toast.makeText(this, fmt("Guardado: %.1f cm", saved.heightCm) + (if (keep) " · con video" else "") +
+                (note?.let { "\n$it" } ?: ""), Toast.LENGTH_LONG).show()
+            if (!keep) f.delete()
             restartLive(null)
         }, lp())
         val row = hbox(8)
@@ -663,6 +719,7 @@ class CaptureActivity : BaseActivity() {
 
     override fun onDestroy() {
         work.shutdownNow()
+        liveExec.shutdownNow()
         super.onDestroy()
     }
 }

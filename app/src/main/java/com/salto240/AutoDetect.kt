@@ -1,65 +1,86 @@
 package com.salto240
 
 import kotlin.math.abs
+import kotlin.math.ceil
 import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.roundToInt
 
 /**
- * Detección automática de despegue y aterrizaje.
+ * Detección automática de despegue y aterrizaje (versión 2).
  *
- * Se analiza una franja horizontal de la imagen justo encima del suelo, a la altura de las suelas.
- * Con los pies apoyados, la franja muestra el calzado; en el aire, solo el fondo.
- * 1. Se toma como referencia "en el aire" el cuadro más distinto del final (atleta de pie).
- * 2. Para cada cuadro se calcula qué fracción de la franja difiere de esa referencia (ocupación).
- *    No depende de la posición del pie, así que funciona aunque aterrice un poco desplazado.
- * 3. Ocupación alta = contacto; se filtran parpadeos de 1–2 cuadros y se buscan las fases de vuelo.
- * Despegue = primer cuadro sin contacto; aterrizaje = primer cuadro con contacto (misma definición que a mano).
+ * Se analiza una banda horizontal alrededor de la línea del suelo: desde un 7 % de la imagen por
+ * encima hasta un 3,5 % por debajo. Así tolera que la línea quede un poco alta o baja.
+ *
+ * 1. Se descartan los cuadros con un salto de exposición (arranque de la cámara, parpadeos fuertes).
+ * 2. Referencias: la imagen al principio (de pie), al final (de pie, quizá en otro sitio) y la imagen
+ *    "sin pies", tomada de los cuadros que más se diferencian de ambas (el vuelo). En el Drop Jump la
+ *    imagen sin pies es la del principio, con el atleta sobre el cajón.
+ * 3. Máscara de los pies: lo que cambia entre "de pie" y "sin pies". Solo cuentan esos píxeles,
+ *    aunque los pies ocupen poco ancho de la imagen.
+ * 4. Fila del suelo: la fila más baja de la máscara (donde apoya la suela). En cada cuadro se busca
+ *    la fila más baja con pie visible: hay contacto mientras esa fila llega al suelo. Al despegar,
+ *    lo último que toca es la punta del pie, así que el talón levantado no adelanta el despegue.
+ *
+ * Despegue = primer cuadro sin contacto; aterrizaje = primer cuadro con contacto (como a mano).
  */
 object AutoDetect {
+
+    /** Tolerancia en filas bajo la que todavía se considera apoyo (para pruebas). */
+    @JvmStatic var TOL = 1
+
+    /** Geometría de la banda que leen la vista previa y el video. */
+    const val ROWS = 36
+    const val COLS = 112
+    const val ABOVE = 0.07f      // fracción de la altura de la imagen sobre la línea del suelo
+    const val BELOW = 0.035f     // fracción bajo la línea
+    const val X0 = 0.06f
+    const val X1 = 0.94f
+
+    fun bandTop(floorV: Float) = (floorV - ABOVE).coerceIn(0f, 1f)
+    fun bandBottom(floorV: Float) = (floorV + BELOW).coerceIn(0f, 1f)
 
     data class Result(
         val takeoff: Int? = null,
         val landing: Int? = null,
-        val contact: Int? = null,          // Drop Jump: primer contacto tras caer del cajón
+        val contact: Int? = null,            // Drop Jump: primer contacto tras caer del cajón
         val events: List<Int> = emptyList(), // Saltos repetidos: despegue, aterrizaje, …
         val error: String? = null,
-        val preContact: Int? = null         // cuadros de apoyo continuo antes del (primer) despegue
+        val preContact: Int? = null,         // cuadros de apoyo continuo antes del (primer) despegue
+        val quality: Float = 0f              // contraste pies/fondo (0–1), para avisar si es bajo
     )
 
-    /** Resta la media para que los cambios de luz (parpadeo LED a 240 fps) no cuenten como pie. */
-    private fun centered(a: FloatArray): FloatArray {
-        var m = 0.0
-        for (v in a) m += v
-        val mean = (m / a.size).toFloat()
-        return FloatArray(a.size) { a[it] - mean }
+    private const val E_CONTRAST = "No se distinguen los pies del fondo cerca de la línea del suelo. Pon la línea justo donde apoya la suela, con buena luz y calzado que contraste con el suelo."
+    private const val E_NOFLIGHT = "No se encontró ninguna fase de vuelo. Revisa la línea del suelo o marca a mano."
+
+    // ------------------------------------------------------------------ utilidades
+
+    private fun median(a: FloatArray): Float {
+        if (a.isEmpty()) return 0f
+        val s = a.copyOf(); s.sort()
+        return if (s.size % 2 == 1) s[s.size / 2] else (s[s.size / 2 - 1] + s[s.size / 2]) / 2f
     }
 
-    private fun dist(a: FloatArray, b: FloatArray): Float {
+    private fun percentile(a: FloatArray, p: Float): Float {
+        if (a.isEmpty()) return 0f
+        val s = a.copyOf(); s.sort()
+        return s[((s.size - 1) * p).roundToInt().coerceIn(0, s.size - 1)]
+    }
+
+    /** Mediana píxel a píxel de un grupo de cuadros. */
+    private fun medianFrame(c: List<FloatArray>, idx: List<Int>): FloatArray {
+        val m = c[0].size
+        val tmp = FloatArray(idx.size)
+        return FloatArray(m) { i ->
+            for (k in idx.indices) tmp[k] = c[idx[k]][i]
+            median(tmp)
+        }
+    }
+
+    private fun meanAbs(a: FloatArray, b: FloatArray): Float {
         var s = 0f
         for (i in a.indices) s += abs(a[i] - b[i])
         return s / a.size
-    }
-
-    /** Ocupación de cada cuadro respecto a la referencia sin pies. */
-    fun occupancy(strips: List<FloatArray>, refIndex: Int? = null): Pair<FloatArray, String?> {
-        val n = strips.size
-        val c = strips.map { centered(it) }
-        val m = c[0].size
-        val tail = max(1, minOf(5, n / 10))
-        val end = FloatArray(m) { i -> (n - tail until n).map { c[it][i] }.average().toFloat() }
-        val ref = refIndex ?: (0 until n).maxByOrNull { dist(c[it], end) } ?: 0
-        val e = c[ref]
-        val d = FloatArray(m) { abs(end[it] - e[it]) }.sortedArray()
-        val p90 = d[((m - 1) * 0.9).roundToInt()]
-        if (p90 < 12f) return FloatArray(n) to "No se distinguen los pies del fondo en la franja elegida. Toca justo donde la suela toca el suelo y mejora la luz o el contraste."
-        val tau = max(10f, 0.35f * p90)
-        val occ = FloatArray(n) { t ->
-            var k = 0
-            val s = c[t]
-            for (i in 0 until m) if (abs(s[i] - e[i]) > tau) k++
-            k.toFloat() / m
-        }
-        return occ to null
     }
 
     private data class Run(val start: Int, val end: Int, val contact: Boolean) {
@@ -68,6 +89,7 @@ object AutoDetect {
 
     private fun runs(flags: BooleanArray): MutableList<Run> {
         val out = mutableListOf<Run>()
+        if (flags.isEmpty()) return out
         var s = 0
         for (i in 1..flags.size) {
             if (i == flags.size || flags[i] != flags[s]) {
@@ -82,55 +104,273 @@ object AutoDetect {
         var changed = true
         while (changed) {
             changed = false
-            for (r in runs(flags)) {
-                if (r.len < minLen && r.start > 0 && r.end < flags.size - 1) {
-                    for (i in r.start..r.end) flags[i] = !r.contact
-                    changed = true
-                    break
-                }
-            }
+            val rs = runs(flags)
+            val r = rs.filter { it.len < minLen && it.start > 0 && it.end < flags.size - 1 }.minByOrNull { it.len } ?: break
+            for (i in r.start..r.end) flags[i] = !r.contact
+            changed = true
         }
     }
 
-    fun detect(strips: List<FloatArray>, fps: Int, test: TestType, refIndex: Int? = null): Result {
+    // ------------------------------------------------------------------ detección
+
+    fun detect(strips: List<FloatArray>, fps: Int, test: TestType, rows: Int = ROWS, cols: Int = COLS): Result {
         val n = strips.size
-        if (n < 20) return Result(error = "El video es demasiado corto.")
-        val (occ, err) = occupancy(strips, refIndex)
-        if (err != null) return Result(error = err)
+        if (n < 12) return Result(error = "El video es demasiado corto.")
+        val m = strips[0].size
+        val nRows = if (rows * cols == m) rows else 1
+        val nCols = if (rows * cols == m) cols else m
 
-        val tail = max(1, minOf(5, n / 10))
-        val stand = (n - tail until n).map { occ[it] }.average().toFloat()
-        if (stand < 0.03f) return Result(error = "Al final del video no se ven los pies en la franja. Termina la grabación con el atleta de pie y toca a la altura de las suelas.")
-        val theta = 0.3f * stand
-        val contact = BooleanArray(n) { occ[it] > theta }
-        smooth(contact, 3)
+        // 1. Cuadros con salto de exposición: se sustituyen por el vecino válido más cercano.
+        val means = FloatArray(n) { t -> strips[t].average().toFloat() }
+        val stds = FloatArray(n) { t ->
+            val mu = means[t]; var s = 0f
+            for (v in strips[t]) s += (v - mu) * (v - mu)
+            kotlin.math.sqrt(s / m)
+        }
+        val medMean = median(means)
+        val medStd = median(stds)
+        val valid = BooleanArray(n) { t ->
+            stds[t] >= 0.35f * medStd && abs(means[t] - medMean) <= 0.4f * medMean + 6f
+        }
+        if (valid.count { it } < n / 2) return Result(error = "La luz cambia demasiado durante la grabación. Evita contraluces y luces que parpadean.")
+        val validIdx = (0 until n).filter { valid[it] }
+        val src = IntArray(n) { t ->
+            if (valid[t]) t else {
+                var pos = validIdx.binarySearch(t)
+                if (pos < 0) pos = -pos - 1
+                val after = validIdx.getOrNull(pos)
+                val before = validIdx.getOrNull(pos - 1)
+                when {
+                    before == null -> after!!
+                    after == null -> before
+                    t - before <= after - t -> before
+                    else -> after
+                }
+            }
+        }
+        // Se resta la media de cada cuadro: los cambios de luz globales (LED a 240 fps) no cuentan como pie.
+        val c: List<FloatArray> = List(n) { t ->
+            val f = strips[src[t]]; val mu = means[src[t]]
+            FloatArray(m) { f[it] - mu }
+        }
 
-        val minFlight = max(5, (0.08 * fps).roundToInt())
+        // 2. Referencias de pie al principio (S) y al final (E).
+        val win = max(3, (0.08 * fps).roundToInt()).coerceAtMost(max(3, n / 5))
+        val endIdx = (n - win until n).toList()
+        val s0 = min((0.05 * fps).roundToInt(), n / 5)
+        val startIdx = (s0 until min(n, s0 + win)).toList()
+        val E = medianFrame(c, endIdx)
+        val S = medianFrame(c, startIdx)
+
+        // Ruido por píxel (mediana de la desviación respecto al final, que está quieto).
+        val devs = FloatArray(endIdx.size * m)
+        var k = 0
+        for (t in endIdx) for (i in 0 until m) devs[k++] = abs(c[t][i] - E[i])
+        val sigma = max(1.5f, median(devs) * 1.4826f)
+
+        // Diferencia = fracción de píxeles que cambiaron de verdad (robusto al ruido de 240 fps con poca luz).
+        val tau0 = max(6f, 3.5f * sigma)
+        fun changed(a: FloatArray, b: FloatArray): Float {
+            var k2 = 0
+            for (i in a.indices) if (abs(a[i] - b[i]) > tau0) k2++
+            return k2.toFloat() / a.size
+        }
+        val dE = FloatArray(n) { changed(c[it], E) }
+        val dS = FloatArray(n) { changed(c[it], S) }
+
+        // 3. Candidatos de imagen "sin pies", en orden de preferencia.
+        val candidates = ArrayList<Pair<IntArray, Boolean>>()   // (cuadros de la referencia, ¿es la del principio?)
+        fun core(score: FloatArray, lo: Int, hi: Int): IntArray? {
+            if (hi - lo < 1) return null
+            var best = lo
+            for (t in lo until hi) if (score[t] > score[best]) best = t
+            val peak = score[best]
+            if (peak <= 0f) return null
+            val maxSpan = max(1, (0.12 * fps).roundToInt())
+            var a = best; var b = best
+            while (a - 1 >= lo && best - (a - 1) <= maxSpan && score[a - 1] >= 0.85f * peak) a--
+            while (b + 1 < hi && (b + 1) - best <= maxSpan && score[b + 1] >= 0.85f * peak) b++
+            return (a..b).toList().toIntArray()
+        }
+        // En pleno vuelo la banda queda vacía y quieta: se premia la estabilidad para no tomar
+        // como referencia el instante del despegue (talón levantado, que también difiere de todo).
+        val kk = max(1, (0.04 * fps).roundToInt())
+        val motion = FloatArray(n) { t ->
+            val a1 = if (t - kk >= 0) changed(c[t], c[t - kk]) else 0f
+            val a2 = if (t + kk < n) changed(c[t], c[t + kk]) else 0f
+            max(a1, a2)
+        }
+        val minScore = FloatArray(n) { min(dE[it], dS[it]) - motion[it] }
+        val dEStable = FloatArray(n) { dE[it] - motion[it] }
+        val startCore = startIdx.toIntArray()
+        if (test == TestType.DJ) {
+            candidates.add(startCore to true)
+            core(minScore, s0, n - win)?.let { candidates.add(it to false) }
+        } else {
+            core(minScore, s0, n - win)?.let { candidates.add(it to false) }
+            candidates.add(startCore to true)          // el atleta entró en cuadro después de empezar a grabar
+            core(dEStable, s0, n - win)?.let { candidates.add(it to false) }
+        }
+
+        // Se prueban todas las referencias y se elige la que deja el vuelo más "vacío" (más parecido a la referencia).
+        var lastError = E_CONTRAST
+        var best: Result? = null
+        var bestScore = Float.MAX_VALUE
+        for ((aIdx, aIsStart) in candidates) {
+            val (r, score) = evaluate(c, aIdx.toList(), aIsStart, E, S, endIdx, startIdx, sigma, fps, test, nRows, nCols)
+            val usable = r.error == null || (r.takeoff != null && r.landing != null) || r.events.isNotEmpty()
+            if (!usable) { lastError = r.error ?: lastError; continue }
+            if (score < bestScore) { best = r; bestScore = score }
+        }
+        return best ?: Result(error = lastError)
+    }
+
+    private fun evaluate(
+        c: List<FloatArray>, aIdx: List<Int>, aIsStart: Boolean,
+        E: FloatArray, S: FloatArray, endIdx: List<Int>, startIdx: List<Int>,
+        sigma: Float, fps: Int, test: TestType, rows: Int, cols: Int
+    ): Pair<Result, Float> {
+        val r = evaluateInner(c, aIdx, aIsStart, E, S, endIdx, startIdx, sigma, fps, test, rows, cols)
+        return r.first to r.second
+    }
+
+    private fun evaluateInner(
+        c: List<FloatArray>, aIdx: List<Int>, aIsStart: Boolean,
+        E: FloatArray, S: FloatArray, endIdx: List<Int>, startIdx: List<Int>,
+        sigma: Float, fps: Int, test: TestType, rows: Int, cols: Int
+    ): Pair<Result, Float> {
+        val n = c.size
+        val m = E.size
+        val A = medianFrame(c, aIdx)
+
+        // Máscara de los pies: lo que difiere entre "de pie" y "sin pies".
+        val diffE = FloatArray(m) { abs(E[it] - A[it]) }
+        val diffS = FloatArray(m) { abs(S[it] - A[it]) }
+        val tau = max(max(6f, 3.5f * sigma), 0.25f * percentile(diffE, 0.98f))
+        val maskE = BooleanArray(m) { diffE[it] > tau }
+        val useS = !aIsStart && test != TestType.DJ
+        val maskS = BooleanArray(m) { useS && diffS[it] > tau }
+        val nE = maskE.count { it }
+        if (nE < max(3, (0.004f * m).roundToInt())) return Result(error = E_CONTRAST) to Float.MAX_VALUE
+
+        // Fila del suelo: la más baja con una porción significativa de pie (de pie al final y, si aplica, al principio).
+        fun floorRow(mask: BooleanArray): Int? {
+            val counts = IntArray(rows) { r -> (0 until cols).count { mask[r * cols + it] } }
+            val peak = counts.maxOrNull() ?: 0
+            if (peak < 2) return null
+            val need = max(2, ceil(0.3f * peak).toInt())
+            for (r in rows - 1 downTo 0) if (counts[r] >= need) return r
+            return null
+        }
+        val floorE = floorRow(maskE) ?: return (Result(error = E_CONTRAST) to Float.MAX_VALUE)
+        val floorS = if (useS) floorRow(maskS) ?: floorE else floorE
+        val floor = min(floorE, floorS)
+
+        // Columnas donde pueden estar los pies (con margen por si aterriza desplazado).
+        val margin = if (test == TestType.RJ) 8 else 3
+        val colOk = BooleanArray(cols)
+        for (r in max(0, floor - 8)..max(floorE, floorS)) for (col in 0 until cols) {
+            val i = r * cols + col
+            if (maskE[i] || maskS[i]) for (d in -margin..margin) {
+                val cc = col + d
+                if (cc in 0 until cols) colOk[cc] = true
+            }
+        }
+        // Contacto: alguna columna con pie en la fila del suelo y en la de encima (un pie, no un píxel suelto).
+        // Basta una columna: al despegar y al aterrizar solo toca la punta del pie.
+        val lowRow = floor - TOL
+        val topRow = max(floorE, floorS)
+        val contact = BooleanArray(n) { t ->
+            val f = c[t]
+            var hit = false
+            loop@ for (col in 0 until cols) {
+                if (!colOk[col]) continue
+                for (r in max(1, lowRow)..topRow) {
+                    val i = r * cols + col
+                    if (abs(f[i] - A[i]) > tau && abs(f[i - cols] - A[i - cols]) > tau) { hit = true; break@loop }
+                }
+            }
+            hit
+        }
+
+        // Comprobación de contraste: de pie debe haber contacto y en la referencia "sin pies", no.
+        val standOk = endIdx.count { contact[it] } >= 0.7 * endIdx.size
+        val airOk = aIdx.count { !contact[it] } >= 0.7 * aIdx.size
+        if (!standOk || !airOk) return Result(error = E_CONTRAST) to Float.MAX_VALUE
+        val quality = (percentile(diffE, 0.98f) / 80f).coerceIn(0f, 1f)
+
+        smooth(contact, max(2, (0.012 * fps).roundToInt()))
+
+        // Contacto estricto (solo la fila del suelo): sirve para afinar el aterrizaje, que con
+        // tolerancia se marcaría cuando la punta aún está a unos milímetros del suelo.
+        fun strictContact(t: Int): Boolean {
+            val f = c[t]
+            for (col in 0 until cols) {
+                if (!colOk[col]) continue
+                for (r in max(1, floor)..topRow) {
+                    val i = r * cols + col
+                    if (abs(f[i] - A[i]) > tau && abs(f[i - cols] - A[i - cols]) > tau) return true
+                }
+            }
+            return false
+        }
+        fun refineLanding(ld: Int): Int {
+            if (TOL == 0) return ld
+            val lim = max(1, (0.012 * fps).roundToInt())
+            for (t in ld..min(n - 1, ld + lim)) if (strictContact(t)) return t
+            return ld
+        }
+
+        val minFlight = max(2, (0.10 * fps).roundToInt())
+        val maxFlight = (1.10 * fps).roundToInt()
         val rs = runs(contact)
         val flights = rs.withIndex().filter { (i, r) ->
-            !r.contact && r.start > 0 && r.end < n - 1 && r.len >= minFlight && i > 0
+            !r.contact && i > 0 && r.start > 0 && r.end < n - 1 && r.len >= minFlight && r.len <= maxFlight
         }
-        if (flights.isEmpty()) return Result(error = "No se encontró ninguna fase de vuelo. Revisa la franja del suelo o marca a mano.")
+        if (flights.isEmpty()) return Result(error = E_NOFLIGHT, quality = quality) to Float.MAX_VALUE
 
-        return when (test) {
+        val tau0 = max(6f, 3.5f * sigma)
+        fun emptiness(a: Int, b: Int): Float {
+            val len = b - a
+            val lo = a + len / 4; val hi = max(lo + 1, b - len / 4)
+            var sum = 0f; var cnt = 0
+            for (t in lo until min(hi, n)) {
+                var k2 = 0
+                for (i in 0 until m) if (abs(c[t][i] - A[i]) > tau0) k2++
+                sum += k2.toFloat() / m; cnt++
+            }
+            return if (cnt == 0) Float.MAX_VALUE else sum / cnt
+        }
+        val res = when (test) {
             TestType.RJ -> {
                 val ev = mutableListOf<Int>()
-                flights.forEach { (_, r) -> ev.add(r.start); ev.add(r.end + 1) }
-                Result(events = ev, preContact = rs.getOrNull(flights.first().index - 1)?.len)
+                flights.forEach { (_, r) -> ev.add(r.start); ev.add(refineLanding(r.end + 1)) }
+                Result(events = ev, preContact = rs.getOrNull(flights.first().index - 1)?.len, quality = quality)
             }
             TestType.DJ -> {
-                // Vuelo precedido por un contacto que a su vez empieza tras una fase sin contacto (la caída del cajón).
+                // Vuelo precedido por un contacto que empieza después de la caída del cajón.
                 val f = flights.firstOrNull { (i, _) -> i >= 2 && rs[i - 1].contact && rs[i - 1].start > 0 }
                     ?: flights.maxByOrNull { it.value.len }!!
                 val prev = rs.getOrNull(f.index - 1)
-                val c = if (prev != null && prev.contact && prev.start > 0) prev.start else null
-                Result(takeoff = f.value.start, landing = f.value.end + 1, contact = c,
-                    error = if (c == null) "No se detectó el contacto inicial tras la caída; márcalo a mano." else null)
+                val cIdx = if (prev != null && prev.contact && prev.start > 0) prev.start else null
+                Result(takeoff = f.value.start, landing = refineLanding(f.value.end + 1), contact = cIdx,
+                    preContact = prev?.len, quality = quality,
+                    error = if (cIdx == null) "No se detectó el contacto inicial tras la caída; márcalo a mano." else null)
             }
             else -> {
                 val f = flights.maxByOrNull { it.value.len }!!
-                Result(takeoff = f.value.start, landing = f.value.end + 1, preContact = rs.getOrNull(f.index - 1)?.len)
+                Result(takeoff = f.value.start, landing = refineLanding(f.value.end + 1),
+                    preContact = rs.getOrNull(f.index - 1)?.len, quality = quality)
             }
         }
+        val score = when {
+            res.events.isNotEmpty() -> res.events.chunked(2).filter { it.size == 2 }.map { emptiness(it[0], it[1]) }.average().toFloat()
+            res.takeoff != null && res.landing != null -> emptiness(res.takeoff, res.landing)
+            else -> Float.MAX_VALUE
+        }
+        // Un vuelo sin apoyo previo suficiente (salvo Drop Jump) es sospechoso: se penaliza.
+        val pre = res.preContact ?: 0
+        val penalty = if (test != TestType.DJ && pre < 0.25 * fps) 1f else 0f
+        return res to (score + penalty)
     }
 }

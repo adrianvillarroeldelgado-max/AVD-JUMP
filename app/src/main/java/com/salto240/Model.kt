@@ -38,7 +38,9 @@ data class Jump(
     val loadKg: Double? = null,               // carga adicional (SJ para perfil F-V)
     val reps: List<Double> = emptyList(),     // RJ: altura de cada salto (cm)
     val repContacts: List<Double> = emptyList(), // RJ: contacto antes de cada salto (ms)
-    val fatiguePct: Double? = null            // RJ: caída de altura, primeros 3 vs últimos 3
+    val fatiguePct: Double? = null,           // RJ: caída de altura, primeros 3 vs últimos 3
+    val video: String? = null,                // video de la evaluación (file:// propio o content:// de la galería)
+    val marks: List<Int> = emptyList()        // cuadros marcados: [despegue, aterrizaje], DJ [contacto, despegue, aterrizaje], RJ todos
 ) {
     val day: String get() = date.take(10)
 
@@ -54,6 +56,8 @@ data class Jump(
         fatiguePct?.let { put("fatiguePct", it) }
         if (reps.isNotEmpty()) put("reps", JSONArray(reps))
         if (repContacts.isNotEmpty()) put("repContacts", JSONArray(repContacts))
+        video?.let { put("video", it) }
+        if (marks.isNotEmpty()) put("marks", JSONArray(marks))
     }
 
     companion object {
@@ -80,7 +84,9 @@ data class Jump(
             loadKg = o.optD("loadKg"),
             reps = o.optList("reps"),
             repContacts = o.optList("repContacts"),
-            fatiguePct = o.optD("fatiguePct")
+            fatiguePct = o.optD("fatiguePct"),
+            video = if (o.has("video")) o.optString("video") else null,
+            marks = o.optJSONArray("marks")?.let { a -> (0 until a.length()).map { a.optInt(it) } } ?: emptyList()
         )
     }
 }
@@ -157,7 +163,7 @@ object Store {
         return out
     }
 
-    private fun save(ctx: Context, list: List<Jump>) {
+    internal fun save(ctx: Context, list: List<Jump>) {
         val arr = JSONArray()
         list.forEach { arr.put(it.toJson()) }
         ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY, arr.toString()).apply()
@@ -170,8 +176,18 @@ object Store {
     }
 
     fun delete(ctx: Context, id: Long) {
-        save(ctx, all(ctx).filter { it.id != id })
+        val list = all(ctx)
+        val gone = list.filter { it.id == id }
+        save(ctx, list.filter { it.id != id })
+        gone.forEach { Videos.deleteIfUnused(ctx, it.video) }
     }
+
+    /** Reemplaza un salto ya guardado (misma id), por ejemplo al volver a medirlo a mano. */
+    fun update(ctx: Context, j: Jump) {
+        save(ctx, all(ctx).map { if (it.id == j.id) j else it })
+    }
+
+    fun byId(ctx: Context, id: Long): Jump? = all(ctx).firstOrNull { it.id == id }
 
     fun ofAthlete(ctx: Context, name: String): List<Jump> = all(ctx).filter { it.athlete == name }
 
@@ -193,7 +209,10 @@ object Store {
     }
 
     fun deleteAthleteJumps(ctx: Context, name: String) {
-        save(ctx, all(ctx).filter { it.athlete != name })
+        val list = all(ctx)
+        val gone = list.filter { it.athlete == name }
+        save(ctx, list.filter { it.athlete != name })
+        gone.forEach { Videos.deleteIfUnused(ctx, it.video) }
     }
 
     fun today(): String = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US).format(Date())

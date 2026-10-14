@@ -47,6 +47,9 @@ class ClientHistoryActivity : BaseActivity() {
         root.addView(sessionsBox, lp())
 
         val actions = hbox(8)
+        root.addView(button("Saltos y videos (medir a mano)") {
+            startActivity(Intent(this, HistoryActivity::class.java).putExtra(MainActivity.EX_ATHLETE, name))
+        }, lp())
         actions.addView(button("Informe") {
             startActivity(Intent(this, ReportActivity::class.java).putExtra(MainActivity.EX_ATHLETE, name))
         }, lp(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))

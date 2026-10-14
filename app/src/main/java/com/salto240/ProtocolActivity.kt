@@ -26,13 +26,13 @@ class ProtocolActivity : BaseActivity() {
                 "En trípode, en vertical. No debe moverse durante la grabación.",
                 "Cámara baja: a 20–40 cm del piso.",
                 "A 1,5–2,5 m del atleta, de frente o de costado.",
-                "Los dos pies en el centro de la imagen: la app no mira los bordes.",
-                "Batería cargada y espacio libre (cada salto ocupa unos 10–20 MB). Cierra otras apps de cámara.",
+                "Los dos pies en el centro de la imagen: la app no mira los bordes. La punta del pie debe verse completa.",
+                "Batería cargada y espacio libre (cada video ocupa unos 10–20 MB; se pueden borrar desde Historial › Videos). Cierra otras apps de cámara.",
                 "Deja «En vivo: Sí» para que la medición sea automática."
             ),
             "3. Línea naranja" to listOf(
                 "Con el atleta parado sobre la cruz, arrastra la línea justo donde la suela toca el piso (no a la altura de los tobillos).",
-                "La app mira una franja delgada encima de la línea: con los pies apoyados debe ver calzado; en el aire, solo fondo.",
+                "La app busca la fila exacta donde apoya la suela, cerca de la línea: tolera que quede un poco alta o baja. Evita que otra persona pase por esa zona mientras graba.",
                 "La posición se recuerda. Ajústala solo si mueves el teléfono."
             ),
             "4. Cada salto" to listOf(
@@ -41,7 +41,8 @@ class ProtocolActivity : BaseActivity() {
                 "Salta y aterriza sobre la cruz, con las piernas extendidas (encoger las piernas en el aire infla la altura).",
                 "Quieto al menos 1 s después de aterrizar.",
                 "La grabación se detiene sola: primero aparece el valor provisional (≈) y en 1–3 s el definitivo.",
-                "Guardar y siguiente si fue válido; Repetir si hubo un error técnico. Sin salto en 15 s, la grabación se reinicia sola."
+                "Guardar y siguiente si fue válido; Repetir si hubo un error técnico. Sin salto en 15 s, la grabación se reinicia sola.",
+                "El video queda guardado con el salto: en Historial, toca el salto para verlo o volver a medirlo a mano."
             )
         )
 

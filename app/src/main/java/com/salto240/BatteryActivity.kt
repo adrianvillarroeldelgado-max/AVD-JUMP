@@ -257,6 +257,8 @@ class BatteryActivity : BaseActivity() {
         val i = requestCode - REQ_PICK
         if (i in 0 until SLOTS && resultCode == RESULT_OK) {
             val uri = data?.data ?: return
+            // Permiso permanente de lectura: el video queda enlazado al salto para revisarlo después.
+            try { contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) {}
             val a = Store.athlete(this, name)
             val it = Intent(this, AnalysisActivity::class.java).apply {
                 putExtra(MainActivity.EX_TEST, protocol(this@BatteryActivity).name)

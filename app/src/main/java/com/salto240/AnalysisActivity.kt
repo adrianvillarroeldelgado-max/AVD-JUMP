@@ -35,6 +35,8 @@ class AnalysisActivity : BaseActivity() {
         const val EX_PRESET_LANDING = "presetLanding"
         const val EX_PRESET_CONTACT = "presetContact"
         const val EX_PRESET_EVENTS = "presetEvents"
+        /** Id de un salto ya guardado que se vuelve a medir: al guardar se actualiza en lugar de crear otro. */
+        const val EX_EDIT_ID = "editJumpId"
     }
 
     private var src: FrameSource? = null
@@ -44,6 +46,7 @@ class AnalysisActivity : BaseActivity() {
 
     private var capFps = 240
     private var fromRecording = false
+    private var editId: Long = -1L
     private var battery = false
     private lateinit var test: TestType
     private var athlete = ""
@@ -93,7 +96,8 @@ class AnalysisActivity : BaseActivity() {
         box = intent.getDoubleExtra(MainActivity.EX_BOX, 0.0).takeIf { it > 0 }
         load = if (test == TestType.SJ || test == TestType.CMJ) intent.getDoubleExtra(MainActivity.EX_LOAD, 0.0) else null
         val recFps = intent.getIntExtra(MainActivity.EX_FPS, 0)
-        fromRecording = recFps > 0
+        editId = intent.getLongExtra(EX_EDIT_ID, -1L)
+        fromRecording = recFps > 0 && editId < 0
         battery = intent.getBooleanExtra(BatteryActivity.EX_BATTERY, false)
         val uri = Uri.parse(intent.getStringExtra(MainActivity.EX_URI) ?: run { finish(); return })
 
@@ -106,12 +110,12 @@ class AnalysisActivity : BaseActivity() {
             s.release(); finish(); return
         }
         src = s
-        capFps = if (fromRecording) recFps else guessCaptureFps(s.fileFps)
+        capFps = if (recFps > 0) recFps else guessCaptureFps(s.fileFps)
 
         buildUi(s)
         show(0)
         compute()
-        if (!fromRecording) askFps(s.fileFps)
+        if (recFps <= 0) askFps(s.fileFps)
         // Grabado con la línea del suelo de la cámara: detección automática directa.
         val floorV = intent.getFloatExtra(CaptureActivity.EX_FLOOR_V, -1f)
         val preset = presetResult()
@@ -119,7 +123,7 @@ class AnalysisActivity : BaseActivity() {
             img.post {
                 imageToViewY(floorV)?.let { floorLine.translationY = it; floorLine.visibility = android.view.View.VISIBLE }
                 // Modo en vivo: las marcas ya vienen calculadas a 240 fps.
-                if (preset != null) applyAuto(preset) else runAuto(0.5f, floorV, 0.38f)
+                if (preset != null) applyAuto(preset) else runAuto(0.5f, floorV, 0.44f)
             }
         } else if (preset != null) {
             img.post { applyAuto(preset) }
@@ -292,7 +296,7 @@ class AnalysisActivity : BaseActivity() {
         val saveRow = hbox(8)
         notes = input("Nota (opcional)")
         saveRow.addView(notes, lp(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-        saveBtn = button("Guardar", true) { save() }
+        saveBtn = button(if (editId >= 0) "Actualizar" else "Guardar", true) { save() }
         saveRow.addView(saveBtn, lp(LinearLayout.LayoutParams.WRAP_CONTENT))
         res.addView(saveRow, lp())
         val resScroll = ScrollView(this).apply { addView(res) }
@@ -515,9 +519,36 @@ class AnalysisActivity : BaseActivity() {
     /** Texto de asimetría si la otra pierna ya se midió hoy. */
     private fun asymmetryNote(saved: Jump): String? = JumpCalc.asymmetryNote(this, saved)
 
+    /** Cuadros marcados, en el orden que guarda Jump.marks. */
+    private fun currentMarks(): List<Int> = when {
+        isRj -> events.toList()
+        test == TestType.DJ -> listOfNotNull(marks["contact"], marks["takeoff"], marks["landing"]).takeIf { it.size == 3 } ?: emptyList()
+        else -> listOfNotNull(marks["takeoff"], marks["landing"]).takeIf { it.size == 2 } ?: emptyList()
+    }
+
     private fun save() {
         val j = current ?: return
-        val saved = j.copy(notes = notes.text.toString().trim())
+        val videoUri = intent.getStringExtra(MainActivity.EX_URI)
+        if (editId >= 0) {
+            // Nueva medición de un salto guardado: se conserva su fecha, atleta y video.
+            val old = Store.byId(this, editId)
+            if (old != null) {
+                val upd = j.copy(id = old.id, date = old.date, athlete = old.athlete,
+                    notes = notes.text.toString().trim().ifEmpty { old.notes },
+                    video = old.video, marks = currentMarks())
+                Store.update(this, upd)
+                saveBtn.isEnabled = false
+                AlertDialog.Builder(this)
+                    .setTitle(fmt("Medición actualizada: %.1f cm", upd.heightCm))
+                    .setMessage(fmt("Antes: %.1f cm (%.0f ms de vuelo)\nAhora: %.1f cm (%.0f ms de vuelo)",
+                        old.heightCm, old.flightMs, upd.heightCm, upd.flightMs))
+                    .setPositiveButton("Cerrar") { _, _ -> finish() }
+                    .show()
+                return
+            }
+        }
+        val saved = j.copy(notes = notes.text.toString().trim(),
+            video = Videos.forJump(this, videoUri), marks = currentMarks())
         Store.add(this, saved)
         saveBtn.isEnabled = false
         if (battery) { batterySaved(saved); return }
@@ -597,10 +628,11 @@ class AnalysisActivity : BaseActivity() {
     }
 
     /** Analiza la franja sobre el suelo en todos los cuadros y coloca las marcas. */
-    private fun runAuto(u: Float, floorV: Float, halfWidth: Float = 0.3f) {
+    private fun runAuto(u: Float, floorV: Float, halfWidth: Float = 0.36f) {
         val s = src ?: return
-        val y1 = floorV
-        val y0 = (floorV - 0.035f).coerceAtLeast(0f)
+        // Banda alrededor de la línea: tolera que quede un poco alta o baja (ver AutoDetect).
+        val y0 = AutoDetect.bandTop(floorV)
+        val y1 = AutoDetect.bandBottom(floorV)
         val x0 = (u - halfWidth).coerceAtLeast(0f)
         val x1 = (u + halfWidth).coerceAtMost(1f)
         scanCancelled = false
