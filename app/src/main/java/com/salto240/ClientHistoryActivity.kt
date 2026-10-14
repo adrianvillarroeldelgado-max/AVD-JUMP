@@ -3,6 +3,8 @@ package com.salto240
 import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
+import java.util.Locale
+import android.app.AlertDialog
 import android.view.View
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
@@ -10,6 +12,7 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.Spinner
 import android.widget.TextView
+import android.widget.Toast
 
 /** Historial de evaluaciones de un cliente: evolución por indicador y detalle de cada día evaluado. */
 class ClientHistoryActivity : BaseActivity() {
@@ -139,8 +142,81 @@ class ClientHistoryActivity : BaseActivity() {
             }
             if (e.values.isEmpty()) card.addView(text("Sin indicadores calculables (p. ej. solo saltos con carga sin completar el perfil).", 12f, Col.MUTED))
             if (e.notes.isNotEmpty()) card.addView(text("Notas: " + e.notes.joinToString(" · "), 12f, Col.MUTED))
+            val btns = hbox(8)
+            btns.addView(button("Saltos") { jumpsOf(e) }, lp(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+            btns.addView(button("Borrar evaluación") { confirmDeleteEvaluation(e) }, lp(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+            card.addView(btns, lp())
             sessionsBox.addView(card, lp())
         }
+        sessionsBox.addView(button("Borrar todos los resultados de $name") { confirmDeleteAll() }, lp())
+    }
+
+    private fun f(p: String, vararg a: Any?) = String.format(Locale.getDefault(), p, *a)
+
+    private fun jumpLabel(j: Jump): String {
+        val load = j.loadKg?.takeIf { it > 0 }?.let { f(" +%.1f kg", it) } ?: ""
+        val extra = if (j.test == TestType.RJ) " (media)" else ""
+        return f("%s%s · %.1f cm%s · %s%s", j.test.short, load, j.heightCm, extra, j.date.drop(11), if (j.video != null) " · video" else "")
+    }
+
+    /** Lista de saltos de la evaluación: se marcan los que se quieren borrar. */
+    private fun jumpsOf(e: Evaluation) {
+        val js = e.jumps
+        val checked = BooleanArray(js.size)
+        AlertDialog.Builder(this)
+            .setTitle("Saltos del " + Evaluations.pretty(e.day))
+            .setMultiChoiceItems(js.map { jumpLabel(it) }.toTypedArray(), checked) { _, w, on -> checked[w] = on }
+            .setPositiveButton("Borrar marcados") { _, _ ->
+                val ids = js.indices.filter { checked[it] }.map { js[it].id }.toSet()
+                if (ids.isEmpty()) {
+                    Toast.makeText(this, "No marcaste ningún salto.", Toast.LENGTH_SHORT).show()
+                } else confirm(
+                    if (ids.size == 1) "¿Borrar 1 salto?" else "¿Borrar ${ids.size} saltos?",
+                    "Se borran sus resultados y sus videos. No se puede deshacer."
+                ) { Store.deleteMany(this, ids); load() }
+            }
+            .setNeutralButton("Ver videos") { _, _ ->
+                startActivity(Intent(this, HistoryActivity::class.java).putExtra(MainActivity.EX_ATHLETE, name))
+            }
+            .setNegativeButton("Cerrar", null)
+            .show()
+    }
+
+    private fun confirmDeleteEvaluation(e: Evaluation) {
+        val nVid = e.jumps.count { it.video != null }
+        confirm(
+            "¿Borrar la evaluación del " + Evaluations.pretty(e.day) + "?",
+            "Se borran sus ${e.jumps.size} saltos" + (if (nVid > 0) " y $nVid videos" else "") + ". No se puede deshacer."
+        ) {
+            val n = Store.deleteMany(this, e.jumps.map { it.id }.toSet())
+            Toast.makeText(this, "Evaluación borrada ($n saltos).", Toast.LENGTH_SHORT).show()
+            load()
+        }
+    }
+
+    private fun confirmDeleteAll() {
+        val all = evals.flatMap { it.jumps }
+        if (all.isEmpty()) return
+        confirm(
+            "¿Borrar todos los resultados de $name?",
+            "Se borran ${evals.size} evaluaciones y ${all.size} saltos con sus videos. La ficha del cliente se conserva. No se puede deshacer."
+        ) {
+            // Segunda confirmación: es la acción más destructiva.
+            confirm("Confirma el borrado", "Vas a borrar ${all.size} saltos de $name.") {
+                Store.deleteMany(this, all.map { it.id }.toSet())
+                Toast.makeText(this, "Resultados de $name borrados.", Toast.LENGTH_SHORT).show()
+                load()
+            }
+        }
+    }
+
+    private fun confirm(title: String, msg: String, onYes: () -> Unit) {
+        AlertDialog.Builder(this)
+            .setTitle(title)
+            .setMessage(msg)
+            .setPositiveButton("Borrar") { _, _ -> onYes() }
+            .setNegativeButton("Cancelar", null)
+            .show()
     }
 
     private fun share() {

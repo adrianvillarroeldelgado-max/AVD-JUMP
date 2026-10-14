@@ -59,6 +59,7 @@ class HistoryActivity : BaseActivity() {
         videoInfo = text("", 13f, Col.INK)
         vRow.addView(videoInfo, lp(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
         vRow.addView(button("Videos") { videoMenu() }, lp(LinearLayout.LayoutParams.WRAP_CONTENT))
+        vRow.addView(button("Borrar") { deleteShown() }, lp(LinearLayout.LayoutParams.WRAP_CONTENT))
         root.addView(vRow, lp())
 
         root.addView(button("Compartir CSV (Excel, Sheets, WhatsApp…)", true) { shareCsv() }, lp())
@@ -118,6 +119,36 @@ class HistoryActivity : BaseActivity() {
         val n = Videos.count(this)
         videoInfo.text = (if (Videos.enabled(this)) "Videos: se guardan" else "Videos: no se guardan") +
             " · " + n + (if (n == 1) " salto con video" else " saltos con video") + " · " + Videos.humanSize(Videos.usedBytes(this))
+    }
+
+    /** Borra los saltos que se están mostrando (según el grupo y el atleta elegidos). */
+    private fun deleteShown() {
+        if (rows.isEmpty()) {
+            Toast.makeText(this, "No hay saltos para borrar.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val who = (spinner.selectedItem as? String)?.takeIf { spinner.selectedItemPosition > 0 }
+            ?: selectedGroup()?.name?.let { "el grupo $it" } ?: "todos los atletas"
+        val n = rows.size
+        val nVid = rows.count { it.video != null }
+        AlertDialog.Builder(this)
+            .setTitle("¿Borrar $n " + (if (n == 1) "salto" else "saltos") + " de $who?")
+            .setMessage("Se borran los resultados" + (if (nVid > 0) " y $nVid videos" else "") +
+                ". Las fichas de los clientes se conservan. No se puede deshacer.\n\nPara borrar uno solo, tócalo en la lista.")
+            .setPositiveButton("Borrar") { _, _ ->
+                AlertDialog.Builder(this)
+                    .setTitle("Confirma el borrado")
+                    .setMessage("Vas a borrar $n " + (if (n == 1) "salto." else "saltos."))
+                    .setPositiveButton("Borrar") { _, _ ->
+                        val done = Store.deleteMany(this, rows.map { it.id }.toSet())
+                        Toast.makeText(this, "$done saltos borrados.", Toast.LENGTH_SHORT).show()
+                        loadNames()
+                    }
+                    .setNegativeButton("Cancelar", null)
+                    .show()
+            }
+            .setNegativeButton("Cancelar", null)
+            .show()
     }
 
     private fun videoMenu() {

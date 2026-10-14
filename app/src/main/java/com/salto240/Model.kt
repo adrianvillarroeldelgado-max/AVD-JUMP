@@ -182,6 +182,16 @@ object Store {
         gone.forEach { Videos.deleteIfUnused(ctx, it.video) }
     }
 
+    /** Borra varios saltos de una vez (y sus videos propios). Devuelve cuántos se borraron. */
+    fun deleteMany(ctx: Context, ids: Set<Long>): Int {
+        if (ids.isEmpty()) return 0
+        val list = all(ctx)
+        val gone = list.filter { it.id in ids }
+        save(ctx, list.filter { it.id !in ids })
+        gone.forEach { Videos.deleteIfUnused(ctx, it.video) }
+        return gone.size
+    }
+
     /** Reemplaza un salto ya guardado (misma id), por ejemplo al volver a medirlo a mano. */
     fun update(ctx: Context, j: Jump) {
         save(ctx, all(ctx).map { if (it.id == j.id) j else it })
