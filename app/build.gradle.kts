@@ -32,6 +32,8 @@ android {
         // Repositorio donde la versión de GitHub busca actualizaciones.
         val repo = System.getenv("GITHUB_REPOSITORY")?.takeIf { it.isNotBlank() } ?: "adrianvillarroeldelgado-max/AVD-JUMP"
         buildConfigField("String", "UPDATE_REPO", "\"$repo\"")
+        // Solo procesadores de teléfonos (la IA trae librerías nativas por procesador).
+        ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
     }
 
     buildFeatures {
