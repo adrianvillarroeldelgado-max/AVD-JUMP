@@ -76,3 +76,8 @@ android {
         checkReleaseBuilds = false
     }
 }
+
+dependencies {
+    // Detección de pose en el teléfono (modo IA en vivo). El modelo va dentro de la app: no necesita internet.
+    implementation("com.google.mlkit:pose-detection:18.0.0-beta5")
+}

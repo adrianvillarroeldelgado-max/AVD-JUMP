@@ -13,6 +13,23 @@ class ProtocolActivity : BaseActivity() {
     companion object {
         /** Prueba a destacar ("FV_BATTERY" para la batería F-V). */
         const val EX_FOCUS = "focus"
+        /** Abierto desde la medición con IA: muestra primero su preparación. */
+        const val EX_AI = "ai"
+
+        private val AI = listOf(
+            "Medición con IA (sin cámara lenta)" to listOf(
+                "La IA reconoce el cuerpo del atleta y sigue sus pies en cada cuadro: no hace falta línea del suelo.",
+                "Teléfono en trípode, en vertical, a 2–3 m del atleta y a la altura de la cadera (unos 80–100 cm).",
+                "Cuerpo entero dentro del recuadro, de la cabeza a los pies, con un poco de piso debajo. De frente o de costado.",
+                "Solo el atleta en la imagen: si hay otras personas, la IA puede seguir a la equivocada.",
+                "Ropa que se distinga del fondo y buena luz: a 30–60 fps la imagen debe verse nítida.",
+                "La estatura del cliente debe estar en su ficha: la app la usa para convertir la imagen a centímetros.",
+                "Quieto 1 s hasta que el esqueleto se ponga verde y aparezca «¡Listo! Salta». Al aterrizar, quieto otra vez: el resultado aparece solo.",
+                "Puedes encadenar intentos sin tocar el teléfono. Toca un resultado para descartarlo y pulsa Guardar al final.",
+                "La altura sale del tiempo de vuelo medido con una parábola ajustada al despegue y al aterrizaje: aterriza con las piernas extendidas.",
+                "Para la máxima precisión (±0,5 cm) usa el modo 240 fps con la línea del suelo."
+            )
+        )
 
         private val GENERAL = listOf(
             "1. Lugar" to listOf(
@@ -102,16 +119,21 @@ class ProtocolActivity : BaseActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val focus = intent.getStringExtra(EX_FOCUS)?.let { if (it == "CMJ_R") "CMJ_L" else it }
+        val aiFirst = intent.getBooleanExtra(EX_AI, false)
 
         val root = vbox(14).apply { setPadding(dp(16), dp(20), dp(16), dp(24)) }
         root.addView(text("Protocolo de grabación", 24f, Col.INK, true))
-        root.addView(text("Para que la app mida el salto sola, a 240 fps, al primer intento.", 14f, Col.MUTED))
+        root.addView(text("Para que la app mida el salto sola al primer intento: con IA en vivo o con cámara lenta a 240 fps.", 14f, Col.MUTED))
 
-        // La prueba elegida va primero, destacada.
+        // Desde la medición con IA, su preparación va primero.
+        if (aiFirst) for ((title, items) in AI) root.addView(section(title, items, highlight = true), lp())
+        // La prueba elegida, destacada.
         TESTS[focus]?.let { (title, items) ->
             root.addView(section("Tu prueba: $title", items, highlight = true), lp())
         }
+        root.addView(text("Modo cámara lenta 240 fps", 18f, Col.TRACK, true))
         for ((title, items) in GENERAL) root.addView(section(title, items), lp())
+        if (!aiFirst) for ((title, items) in AI) root.addView(section(title, items), lp())
 
         val pTests = panel()
         pTests.addView(caption("Indicaciones por prueba"))

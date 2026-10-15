@@ -59,7 +59,7 @@ class MainActivity : BaseActivity() {
 
         /** Intent de captura listo para una prueba concreta (lo usa también el Perfil F-V). */
         fun captureIntent(ctx: Context, t: TestType, athlete: String, mass: Double?, box: Double?, load: Double?): Intent =
-            Intent(ctx, CaptureActivity::class.java).apply {
+            Intent(ctx, CaptureMode.cls(ctx)).apply {
                 putExtra(EX_TEST, t.name)
                 putExtra(EX_ATHLETE, athlete)
                 putExtra(EX_MASS, mass ?: 0.0)
@@ -138,6 +138,25 @@ class MainActivity : BaseActivity() {
         // Medir
         val pAct = panel()
         pAct.addView(caption("Medir"))
+        // Modo de medición: IA en vivo (como My Jump Lab) o cámara lenta 240 fps.
+        val modes = listOf(
+            "IA en vivo · cuerpo entero, sin cámara lenta",
+            "Cámara lenta 240 fps · línea del suelo"
+        )
+        val modeSpinner = Spinner(this).apply {
+            adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item, modes)
+            setSelection(if (CaptureMode.ai(this@MainActivity)) 0 else 1)
+            onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+                override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                    CaptureMode.set(this@MainActivity, position == 0)
+                    showModeInfo()
+                }
+                override fun onNothingSelected(parent: AdapterView<*>?) {}
+            }
+        }
+        pAct.addView(modeSpinner, lp())
+        modeInfo = text("", 13f, Col.MUTED)
+        pAct.addView(modeInfo)
         camInfo = text("Buscando cámara lenta…", 13f, Col.MUTED)
         pAct.addView(camInfo)
         recordBtn = button("Grabar salto", true) { startCapture() }
@@ -146,6 +165,7 @@ class MainActivity : BaseActivity() {
         pAct.addView(galleryBtn, lp())
         root.addView(pAct, lp())
         updateFields()
+        showModeInfo()
 
         // Evaluación
         val pEval = panel()
@@ -193,6 +213,16 @@ class MainActivity : BaseActivity() {
                 camInfo.setTextColor(if (cfg?.highSpeed == true) Col.OK else Col.WARN)
             }
         }.start()
+    }
+
+    private lateinit var modeInfo: TextView
+
+    private fun showModeInfo() {
+        val ai = CaptureMode.ai(this)
+        modeInfo.text = if (ai)
+            "La IA sigue el cuerpo del atleta y muestra cada salto al aterrizar, sin detener la cámara. Usa la estatura de la ficha."
+        else "Graba en cámara lenta y mide cuadro a cuadro: la opción más precisa (±0,5 cm)."
+        if (::camInfo.isInitialized) camInfo.visibility = if (ai) View.GONE else View.VISIBLE
     }
 
     private fun updateFields() {
@@ -285,7 +315,7 @@ class MainActivity : BaseActivity() {
             requestPermissions(arrayOf(Manifest.permission.CAMERA), REQ_CAMERA)
             return
         }
-        startActivity(testIntent(CaptureActivity::class.java))
+        startActivity(testIntent(CaptureMode.cls(this)))
     }
 
     private fun pickVideo() {
@@ -318,7 +348,7 @@ class MainActivity : BaseActivity() {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == REQ_CAMERA) {
             if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                startActivity(testIntent(CaptureActivity::class.java))
+                startActivity(testIntent(CaptureMode.cls(this)))
             } else {
                 Toast.makeText(this, "Sin permiso de cámara no se puede grabar. Puedes analizar videos de la galería.", Toast.LENGTH_LONG).show()
             }

@@ -142,24 +142,38 @@ object JumpCalc {
     ): Out? {
         val flightFrames = landing - takeoff
         if (flightFrames <= 0) return null
-        val tv = flightFrames.toDouble() / fps
+        var tc: Double? = null
+        if (test == TestType.DJ) {
+            val c = contact ?: return null
+            tc = (takeoff - c).toDouble() / fps
+            if (tc <= 0) return null
+        }
+        return fromFlight(test, athlete, flightFrames.toDouble() / fps, tc, mass, box, load, fps,
+            f("Medido a %d fps · ±1 cuadro = ±%.1f ms", fps, 1000.0 / fps))
+    }
+
+    /** Salto a partir del tiempo de vuelo (s) y, en Drop Jump, del contacto (s). Lo usa también el modo IA. */
+    fun fromFlight(
+        test: TestType, athlete: String, tv: Double, tc: Double?,
+        mass: Double?, box: Double?, load: Double?, fps: Int, footer: String
+    ): Out? {
+        if (tv <= 0) return null
         val h = Calc.heightCm(tv)
         val sb = StringBuilder()
         sb.append(f("Vuelo %.0f ms · despegue %.2f m/s\n", tv * 1000, Calc.takeoffVelocity(tv)))
         var tcMs: Double? = null
         var rsi: Double? = null
         if (test == TestType.DJ) {
-            val c = contact ?: return null
-            val tc = (takeoff - c).toDouble() / fps
-            if (tc <= 0) return null
-            tcMs = tc * 1000
-            rsi = Calc.rsi(h, tc)
+            val c = tc ?: return null
+            if (c <= 0) return null
+            tcMs = c * 1000
+            rsi = Calc.rsi(h, c)
             sb.append(f("Contacto %.0f ms · RSI %.2f\n", tcMs, rsi))
         }
         val power = mass?.let { Calc.sayersPower(h, it) }
         if (power != null && mass != null && (load ?: 0.0) == 0.0)
             sb.append(f("Potencia %.0f W · %.1f W/kg\n", power, power / mass))
-        sb.append(f("Medido a %d fps · ±1 cuadro = ±%.1f ms", fps, 1000.0 / fps))
+        sb.append(footer)
         val j = Jump(
             id = System.currentTimeMillis(),
             date = Store.today(),
@@ -177,6 +191,32 @@ object JumpCalc {
             loadKg = load
         )
         return Out(j, sb.toString())
+    }
+
+    /** Serie de saltos repetidos a partir de los vuelos y contactos (s). */
+    fun repeated(athlete: String, flights: List<Double>, contacts: List<Double>, mass: Double?, fps: Int): Jump? {
+        if (flights.isEmpty()) return null
+        val heights = flights.map { Calc.heightCm(it) }
+        val rsis = heights.drop(1).zip(contacts).map { (h, c) -> Calc.rsi(h, c) }
+        val meanH = heights.average()
+        return Jump(
+            id = System.currentTimeMillis(),
+            date = Store.today(),
+            athlete = athlete,
+            test = TestType.RJ,
+            flightMs = flights.average() * 1000,
+            heightCm = (meanH * 10).roundToInt() / 10.0,
+            contactMs = if (contacts.isEmpty()) null else contacts.average() * 1000,
+            rsi = if (rsis.isEmpty()) null else rsis.average(),
+            boxCm = null,
+            massKg = mass,
+            powerW = null,
+            fps = fps,
+            notes = "",
+            reps = heights.map { (it * 10).roundToInt() / 10.0 },
+            repContacts = contacts.map { (it * 1000).roundToInt().toDouble() },
+            fatiguePct = Calc.fatigue(heights)
+        )
     }
 
     /** Texto de asimetría si la otra pierna ya se midió hoy. */
