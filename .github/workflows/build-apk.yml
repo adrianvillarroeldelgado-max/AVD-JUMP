@@ -43,7 +43,7 @@ jobs:
         run: |
           chmod +x gradlew
           set -o pipefail
-          if ! ./gradlew assembleGithubRelease --stacktrace --console=plain 2>&1 | tee gradle.log; then
+          if ! ./gradlew assembleGithubRelease bundlePlayRelease --stacktrace --console=plain 2>&1 | tee gradle.log; then
             # Muestra el error como anotación para leerlo sin abrir el registro completo.
             msg=$(grep -E "^e: |What went wrong|^> |error:|Could not|Unresolved|FAILED" gradle.log | head -60 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
             echo "::error title=Error de compilación::$msg"
