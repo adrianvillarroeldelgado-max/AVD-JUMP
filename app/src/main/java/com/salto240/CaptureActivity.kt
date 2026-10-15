@@ -193,6 +193,7 @@ class CaptureActivity : BaseActivity() {
         val row = hbox(8)
         row.addView(recBtn, lp(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
         row.addView(liveBtn, lp(LinearLayout.LayoutParams.WRAP_CONTENT))
+        row.addView(button("IA") { switchToAi() }, lp(LinearLayout.LayoutParams.WRAP_CONTENT))
         bottom.addView(info)
         bottom.addView(row, lp())
         root.addView(bottom, FrameLayout.LayoutParams(
@@ -521,6 +522,14 @@ class CaptureActivity : BaseActivity() {
         else "Encuadra y pulsa Grabar. Detén después de aterrizar."
 
     private fun liveLabel() = if (live) "En vivo: Sí" else "En vivo: No"
+
+    /** Cambia a la medición con IA (cámara normal, sin línea del suelo). */
+    private fun switchToAi() {
+        if (recording || starting) return
+        CaptureMode.set(this, ai = true)
+        startActivity(MainActivity.forward(intent, Intent(this, AiCaptureActivity::class.java)))
+        finish()
+    }
 
     private fun toggleLive() {
         if (recording || starting) return
