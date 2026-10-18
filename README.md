@@ -17,7 +17,7 @@ App nativa en Kotlin para medir **CMJ**, **CMJ con brazos (Abalakov)** y **Drop 
   - Si hay masa: potencia pico de Sayers.
 - **Clientes y grupos:** ficha con nombre, grupo, fecha de nacimiento (edad), sexo, peso, estatura, deporte, posición, pierna dominante, medidas de pierna para el perfil F-V y notas. Se elige el cliente antes de medir; el historial y el CSV se filtran por grupo.
 - **Historial de evaluaciones por cliente:** cada día de medición es una evaluación. Gráfico de evolución por indicador (CMJ, CMJ con brazos, SJ, RSI, asimetría, saltos repetidos, Pmax y perfil F-V) y comparación con la evaluación anterior (▲ mejora, ▼ empeora). Se comparte como texto.
-- **Pruebas:** CMJ, CMJ con brazos, Squat Jump (con o sin carga), Drop Jump, CMJ a una pierna (izquierda y derecha) y saltos repetidos.
+- **Pruebas:** CMJ, CMJ con brazos, Squat Jump (con o sin carga), Drop Jump, Drop Jump a una pierna (asimetría reactiva), CMJ a una pierna (izquierda y derecha), saltos repetidos, test 10/5 (RSI de los 5 mejores) y pogo jumps.
 - **Detección automática (240 fps):**
   - Al grabar, se arrastra la línea naranja hasta donde apoyan los pies. Al detener, la app analiza esa franja en todos los cuadros y coloca despegue, aterrizaje y contacto (Drop Jump) o todas las marcas de los saltos repetidos.
   - Con videos de la galería, se pulsa **Auto** y se toca el suelo bajo los pies.
@@ -35,6 +35,13 @@ App nativa en Kotlin para medir **CMJ**, **CMJ con brazos (Abalakov)** y **Drop 
   - Clasifica el perfil: déficit de fuerza alto (<60 % del óptimo) o leve (60–90 %), equilibrado (90–110 %), déficit de velocidad leve (110–140 %) o alto (>140 %).
   - Sugerencia de entrenamiento: el programa de Jiménez-Reyes, Samozino, Brughelli y Morin (2017), base de My Jump 2 y My Jump Lab. Cada semana, 6 ejercicios de 3 series repartidos entre fuerza, fuerza-potencia, potencia, potencia-velocidad y velocidad según el déficit (p. ej. déficit de fuerza alto: 3-2-1-0-0; déficit de velocidad alto: 0-0-1-2-3), con los ejercicios y cargas del estudio, 2 sesiones por semana durante 9 semanas.
 - **Informe y recomendaciones:** resumen por atleta y sugerencias priorizadas (perfil F-V, asimetría, RSI, relación CMJ/SJ, uso de brazos, fatiga en saltos repetidos). Se comparte como texto.
+- **Intentos válidos:** por prueba y día muestra el mejor, la media y el CV entre intentos; marca intentos atípicos (>10 % de la mediana) y avisos de técnica con IA (rodillas flexionadas al aterrizar, manos fuera de la cadera). Comprueba los fps reales del video.
+- **Sesión de grupo con voz:** se elige grupo, prueba, intentos y orden (rotación o seguidos). La cámara llama a cada atleta, dice el resultado en voz alta, lo guarda a los 4 s y pasa al siguiente. Funciona con un botón Bluetooth de selfie o las teclas de volumen. Resultado en pantalla grande y nivel de la cámara.
+- **Disposición diaria:** CMJ del día frente a la línea base (últimos 10 días, mínimo 3), semáforo por z (verde ≥ −1, amarillo −1 a −2, rojo < −2) y SWC = 0,2 × DE.
+- **Altura óptima de Drop Jump:** RSI por altura de cajón y la altura con mejor RSI.
+- **Percentiles y ranking:** percentil frente a los demás clientes del mismo sexo (y deporte) y frente a valores de referencia cargados por el usuario (media y DE); ranking del grupo por indicador.
+- **Datos:** copia de seguridad (con o sin videos) y restauración (combinar o reemplazar), copia automática semanal en una carpeta (p. ej. Google Drive), importación de clientes desde Excel o CSV con plantilla, exportación a Excel (.xlsx) e informe en PDF con logo.
+- **Guía de primera vez** e **idiomas** español, inglés y portugués (diccionarios en `app/src/main/assets/i18n`).
 - **Historial:**
   - Filtro por atleta con mejor CMJ, mejor CMJ brazos, % de uso de brazos y mejor RSI.
   - Exporta en CSV para compartir por WhatsApp, correo, Drive, etc.

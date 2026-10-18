@@ -87,27 +87,40 @@ class AiCaptureActivity : BaseActivity() {
     private val frameTimes = ArrayDeque<Long>()
 
     /** Saltos de esta sesión (o series en saltos repetidos); kept = se guardará. */
-    private class Item(val reps: List<PoseJumpDetector.Rep>, var kept: Boolean = true)
+    private class Item(val reps: List<PoseJumpDetector.Rep>, val flags: List<String> = emptyList(), var kept: Boolean = true)
+    /** Ángulo de rodilla y posición de manos de los últimos segundos (control de técnica). */
+    private val techFrames = ArrayDeque<Technique.Frame>()
+    private var techOn = true
     private val items = ArrayList<Item>()
 
     private fun fmt(p: String, vararg a: Any?) = String.format(Locale.getDefault(), p, *a)
+
+    // Sesión de grupo, voz, nivel y control remoto
+    private var groupMode = false
+    private lateinit var rootFrame: FrameLayout
+    private lateinit var topText: TextView
+    private lateinit var level: LevelView
+    private var autoSave: Runnable? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
         test = TestType.of(intent.getStringExtra(MainActivity.EX_TEST))
-        athlete = intent.getStringExtra(MainActivity.EX_ATHLETE) ?: "Sin nombre"
+        groupMode = intent.getBooleanExtra(GroupSession.EX_SESSION, false) && GroupSession.get(this)?.finished == false
+        athlete = (if (groupMode) GroupSession.get(this)?.current?.first else null)
+            ?: intent.getStringExtra(MainActivity.EX_ATHLETE) ?: "Sin nombre"
         battery = intent.getBooleanExtra(BatteryActivity.EX_BATTERY, false)
         mass = intent.getDoubleExtra(MainActivity.EX_MASS, 0.0).takeIf { it > 0 } ?: Store.athlete(this, athlete).massKg
         box = intent.getDoubleExtra(MainActivity.EX_BOX, 0.0).takeIf { it > 0 }
         load = if (test == TestType.SJ || test == TestType.CMJ) intent.getDoubleExtra(MainActivity.EX_LOAD, 0.0) else null
         stature = Clients.byName(this, athlete)?.heightCm
+        techOn = Technique.enabled(this)
         detector = PoseJumpDetector(test, stature, box)
 
         val s = chooseSetup()
         if (s == null) {
-            Toast.makeText(this, "No se encontró una cámara trasera.", Toast.LENGTH_LONG).show()
+            Tst.makeText(this, "No se encontró una cámara trasera.", Toast.LENGTH_LONG).show()
             finish(); return
         }
         setup = s
@@ -116,7 +129,9 @@ class AiCaptureActivity : BaseActivity() {
         pose = PoseDetection.getClient(
             PoseDetectorOptions.Builder().setDetectorMode(PoseDetectorOptions.STREAM_MODE).build()
         )
-        if (stature == null) askStature()
+        if (stature == null && !groupMode) askStature()
+        Voice.init(this)
+        if (groupMode) GroupSession.get(this)?.let { Voice.say(this, GroupSession.announce(it)) }
         if (android.os.Build.VERSION.SDK_INT >= 33) {
             onBackInvokedDispatcher.registerOnBackInvokedCallback(
                 android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT) { handleBack() }
@@ -129,6 +144,7 @@ class AiCaptureActivity : BaseActivity() {
 
     private fun buildUi(s: Setup) {
         val root = FrameLayout(this).apply { setBackgroundColor(0xFF000000.toInt()) }
+        rootFrame = root
         texture = AutoFitTextureView(this)
         texture.setAspect(s.preview.height, s.preview.width)
         root.addView(texture, FrameLayout.LayoutParams(
@@ -138,10 +154,16 @@ class AiCaptureActivity : BaseActivity() {
             FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
 
         // Barra superior
-        val top = text("${test.label} · $athlete", 14f, 0xFFFFFFFF.toInt(), true).apply {
+        val top = text(topLabel(), 14f, 0xFFFFFFFF.toInt(), true).apply {
             setBackgroundColor(0x99000000.toInt())
             setPadding(dp(12), dp(8), dp(12), dp(8))
         }
+        topText = top
+        level = LevelView(this)
+        root.addView(level, FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL).apply {
+            bottomMargin = dp(210)
+        })
         root.addView(top, FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.START).apply {
             setMargins(dp(12), dp(12), dp(124), 0)
@@ -212,8 +234,8 @@ class AiCaptureActivity : BaseActivity() {
     }
 
     private fun hint() = when {
-        test == TestType.DJ -> "Cuerpo entero dentro del recuadro. Primero quieto en el suelo 1 s, luego sube al cajón, déjate caer y rebota."
-        test == TestType.RJ -> "Cuerpo entero dentro del recuadro. Quieto 1 s, salta seguido y al terminar quédate quieto 2 s."
+        test.isDrop -> "Cuerpo entero dentro del recuadro. Primero quieto en el suelo 1 s, luego sube al cajón, déjate caer y rebota."
+        test.isRepeated -> "Cuerpo entero dentro del recuadro. Quieto 1 s, salta seguido y al terminar quédate quieto 2 s."
         else -> "Cuerpo entero dentro del recuadro. Quieto 1 s, salta y quédate quieto al aterrizar. Puedes saltar las veces que quieras."
     }
 
@@ -221,7 +243,7 @@ class AiCaptureActivity : BaseActivity() {
         val n = items.count { it.kept }
         return when {
             battery -> "Guardar esta carga"
-            test == TestType.RJ -> if (n > 1) "Guardar $n series" else "Guardar serie"
+            test.isRepeated -> if (n > 1) "Guardar $n series" else "Guardar serie"
             n == 0 -> "Guardar"
             else -> "Guardar $n ${if (n == 1) "salto" else "saltos"}"
         }
@@ -232,13 +254,13 @@ class AiCaptureActivity : BaseActivity() {
         val form = vbox(8).apply { setPadding(dp(20), dp(8), dp(20), 0) }
         form.addView(text("La IA usa la estatura para convertir la imagen a centímetros. Se guarda en la ficha del cliente.", 14f, Col.MUTED))
         form.addView(inp, lp())
-        AlertDialog.Builder(this)
+        Dlg(this)
             .setTitle("Estatura de $athlete")
             .setView(form)
             .setPositiveButton("Guardar") { _, _ ->
                 val v = inp.number()?.takeIf { it in 100.0..230.0 }
                 if (v == null) {
-                    Toast.makeText(this, "Estatura no válida: se usará 170 cm.", Toast.LENGTH_LONG).show()
+                    Tst.makeText(this, "Estatura no válida: se usará 170 cm.", Toast.LENGTH_LONG).show()
                 } else {
                     stature = v
                     Clients.byName(this, athlete)?.let { Clients.save(this, it.copy(heightCm = v)) }
@@ -290,17 +312,20 @@ class AiCaptureActivity : BaseActivity() {
         camThread = HandlerThread("cam-ia").also { it.start() }
         camHandler = Handler(camThread!!.looper)
         if (texture.isAvailable) openCamera()
+        level.start()
     }
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (grantResults.isEmpty() || grantResults[0] != android.content.pm.PackageManager.PERMISSION_GRANTED) {
-            Toast.makeText(this, "Sin permiso de cámara no se puede medir.", Toast.LENGTH_LONG).show()
+            Tst.makeText(this, "Sin permiso de cámara no se puede medir.", Toast.LENGTH_LONG).show()
             finish()
         }
     }
 
     override fun onPause() {
+        if (::level.isInitialized) level.stop()
+        cancelAutoSave()
         closeCamera()
         camThread?.quitSafely()
         camThread = null; camHandler = null
@@ -323,13 +348,13 @@ class AiCaptureActivity : BaseActivity() {
                 override fun onError(device: CameraDevice, error: Int) {
                     device.close(); camera = null
                     main.post {
-                        Toast.makeText(this@AiCaptureActivity, "Error de cámara ($error). Cierra otras apps que usen la cámara.", Toast.LENGTH_LONG).show()
+                        Tst.makeText(this@AiCaptureActivity, "Error de cámara ($error). Cierra otras apps que usen la cámara.", Toast.LENGTH_LONG).show()
                         finish()
                     }
                 }
             }, camHandler)
         } catch (e: Exception) {
-            Toast.makeText(this, "No se pudo abrir la cámara: ${e.message}", Toast.LENGTH_LONG).show()
+            Tst.makeText(this, "No se pudo abrir la cámara: ${e.message}", Toast.LENGTH_LONG).show()
         }
     }
 
@@ -366,15 +391,15 @@ class AiCaptureActivity : BaseActivity() {
                         cs.setRepeatingRequest(b.build(), null, camHandler)
                         main.post { status.text = "Colócate de cuerpo entero en el recuadro" }
                     } catch (e: Exception) {
-                        main.post { Toast.makeText(this@AiCaptureActivity, "Cámara no disponible: ${e.message}", Toast.LENGTH_LONG).show() }
+                        main.post { Tst.makeText(this@AiCaptureActivity, "Cámara no disponible: ${e.message}", Toast.LENGTH_LONG).show() }
                     }
                 }
                 override fun onConfigureFailed(cs: CameraCaptureSession) {
-                    main.post { Toast.makeText(this@AiCaptureActivity, "La cámara rechazó la configuración.", Toast.LENGTH_LONG).show() }
+                    main.post { Tst.makeText(this@AiCaptureActivity, "La cámara rechazó la configuración.", Toast.LENGTH_LONG).show() }
                 }
             }, camHandler)
         } catch (e: Exception) {
-            Toast.makeText(this, "No se pudo iniciar la cámara: ${e.message}", Toast.LENGTH_LONG).show()
+            Tst.makeText(this, "No se pudo iniciar la cámara: ${e.message}", Toast.LENGTH_LONG).show()
         }
     }
 
@@ -418,6 +443,11 @@ class AiCaptureActivity : BaseActivity() {
         val foot = listOfNotNull(left, right).maxOrNull()
         val nose = lm(PoseLandmark.NOSE)?.position?.y?.toDouble()
 
+        if (techOn) {
+            val tS = tsNs / 1e9
+            techFrames.addLast(Technique.frame(p, tS))
+            while (techFrames.isNotEmpty() && tS - techFrames.first().t > 25.0) techFrames.removeFirst()
+        }
         val ev = detector.add(PoseJumpDetector.Sample(tsNs / 1e9, foot, nose))
 
         overlay.update(p, uw, uh, detector.floorPx, detector.state)
@@ -431,8 +461,8 @@ class AiCaptureActivity : BaseActivity() {
             body != null && body > 0.92 -> "Aléjate: la cabeza y los pies deben verse"
             detector.state == PoseJumpDetector.State.CALIBRATING -> "Quieto…"
             detector.state == PoseJumpDetector.State.AIR ->
-                if (test == TestType.DJ) "Sobre el cajón / en el aire" else "En el aire"
-            test == TestType.DJ -> "¡Listo! Sube al cajón y déjate caer"
+                if (test.isDrop) "Sobre el cajón / en el aire" else "En el aire"
+            test.isDrop -> "¡Listo! Sube al cajón y déjate caer"
             else -> "¡Listo! Salta"
         }
 
@@ -452,11 +482,24 @@ class AiCaptureActivity : BaseActivity() {
 
     private fun fpsInt() = effectiveFps().roundToInt().coerceAtLeast(1)
 
+    private fun techFlags(reps: List<PoseJumpDetector.Rep>): List<String> {
+        if (!techOn || reps.isEmpty()) return emptyList()
+        val fr = techFrames.toList()
+        val first = reps.first()
+        return if (test.isRepeated) {
+            // En series solo se controla la posición de las manos (10/5).
+            Technique.check(test, Technique.around(fr, first.takeoffT, 0.1, 0.0), emptyList())
+        } else Technique.check(test,
+            Technique.around(fr, first.takeoffT, 0.1, 0.0),
+            Technique.around(fr, first.landingT, 0.05, 0.035))
+    }
+
     private fun addItem(reps: List<PoseJumpDetector.Rep>) {
-        items.add(Item(reps))
+        val flags = techFlags(reps)
+        items.add(Item(reps, flags))
         val first = reps.first()
         bigResult.visibility = View.VISIBLE
-        if (test == TestType.RJ) {
+        if (test.isRepeated) {
             bigResult.text = fmt("%.1f cm", reps.map { it.heightCm }.average())
             val tcs = reps.mapNotNull { it.contactS }
             detail.text = fmt("%d saltos · mejor %.1f cm", reps.size, reps.maxOf { it.heightCm }) +
@@ -467,11 +510,21 @@ class AiCaptureActivity : BaseActivity() {
             first.contactS?.let { sb.append(fmt(" · contacto %.0f ms · RSI %.2f", it * 1000, Calc.rsi(first.heightCm, it))) }
             detail.text = sb.toString()
         }
+        if (flags.isNotEmpty()) detail.append("\n⚠ " + flags.joinToString("\n⚠ "))
         refreshChips()
+        // Resultado en voz alta y en grande.
+        val big = bigResult.text.toString()
+        val said = if (test.isRepeated) fmt("%d saltos, media ", reps.size) + Voice.num(this, reps.map { it.heightCm }.average()) + " centímetros"
+            else Voice.num(this, first.heightCm) + " centímetros" + (first.contactS?.let { ". RSI " + Voice.num(this, Calc.rsi(first.heightCm, it), 2) } ?: "")
+        Voice.say(this, "$athlete, $said" + if (flags.contains(Technique.MSG_KNEES)) ". Atención: rodillas flexionadas al aterrizar." else "")
+        BigResult.show(rootFrame, athlete, big, detail.text.lineSequence().firstOrNull() ?: "",
+            if (flags.isEmpty()) 0xFFFFFFFF.toInt() else 0xFFFFC04D.toInt())
+        // Sesión de grupo: se guarda solo a los 4 s y pasa al siguiente (Quitar último lo cancela).
+        if (groupMode && !battery) startAutoSave(4)
     }
 
     private fun itemHeight(it: Item) =
-        if (test == TestType.RJ) it.reps.map { r -> r.heightCm }.average() else it.reps.first().heightCm
+        if (test.isRepeated) it.reps.map { r -> r.heightCm }.average() else it.reps.first().heightCm
 
     private fun refreshChips() {
         chips.removeAllViews()
@@ -486,11 +539,12 @@ class AiCaptureActivity : BaseActivity() {
                 paintFlags = if (it.kept) paintFlags and Paint.STRIKE_THRU_TEXT_FLAG.inv() else paintFlags or Paint.STRIKE_THRU_TEXT_FLAG
                 background = rounded(
                     if (it.kept && h == best) Col.ACCENT else if (it.kept) 0xFF2A3A55.toInt() else 0x33FFFFFF,
-                    0, 16)
+                    if (it.flags.isNotEmpty()) 0xFFFFB020.toInt() else 0, 16)
+                if (it.flags.isNotEmpty()) text = "⚠ " + text
                 minHeight = dp(36); minimumHeight = dp(36)
                 setPadding(dp(12), 0, dp(12), 0)
                 stateListAnimator = null
-                setOnClickListener { _ -> it.kept = !it.kept; refreshChips() }
+                setOnClickListener { _ -> cancelAutoSave(); it.kept = !it.kept; refreshChips() }
             }
             chips.addView(b, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(36)))
         }
@@ -500,7 +554,66 @@ class AiCaptureActivity : BaseActivity() {
         undoBtn.isEnabled = items.isNotEmpty()
     }
 
+    private fun startAutoSave(seconds: Int) {
+        cancelAutoSave()
+        var left = seconds
+        val r = object : Runnable {
+            override fun run() {
+                if (autoSave !== this) return
+                if (left <= 0) { autoSave = null; save(); return }
+                saveBtn.text = saveLabel() + " ($left)"
+                left--
+                main.postDelayed(this, 1000)
+            }
+        }
+        autoSave = r
+        main.post(r)
+    }
+
+    private fun cancelAutoSave() {
+        autoSave?.let { main.removeCallbacks(it) }
+        autoSave = null
+        if (::saveBtn.isInitialized) saveBtn.text = saveLabel()
+    }
+
+    private fun topLabel(): String {
+        val s = if (groupMode) GroupSession.get(this) else null
+        return if (s != null) "${test.label} · ${s.label()}" else "${test.label} · $athlete"
+    }
+
+    /** Sesión de grupo: pasa al siguiente turno (otro atleta o el mismo, según el orden). */
+    private fun nextTurn() {
+        val s = GroupSession.advance(this)
+        if (s == null || s.finished) {
+            Voice.say(this, "Sesión terminada. Buen trabajo.")
+            finish(); return
+        }
+        val name = s.current!!.first
+        if (name != athlete) {
+            athlete = name
+            val c = Clients.byName(this, name)
+            mass = c?.massKg
+            stature = c?.heightCm
+            detector = PoseJumpDetector(test, stature, box)
+            techFrames.clear()
+        }
+        topText.text = topLabel()
+        Voice.say(this, GroupSession.announce(s))
+    }
+
+    override fun onKeyDown(keyCode: Int, event: android.view.KeyEvent): Boolean {
+        if (RemoteKeys.isTrigger(keyCode)) {
+            if (event.repeatCount == 0 && saveBtn.isEnabled) saveBtn.performClick()
+            return true
+        }
+        return super.onKeyDown(keyCode, event)
+    }
+
+    override fun onKeyUp(keyCode: Int, event: android.view.KeyEvent): Boolean =
+        if (RemoteKeys.isTrigger(keyCode)) true else super.onKeyUp(keyCode, event)
+
     private fun undo() {
+        cancelAutoSave()
         if (items.isEmpty()) return
         items.removeAt(items.size - 1)
         if (items.isEmpty()) { bigResult.visibility = View.GONE; detail.text = hint() }
@@ -513,17 +626,19 @@ class AiCaptureActivity : BaseActivity() {
 
     private fun footer() = fmt("Medido con IA a %d fps", fpsInt())
 
-    private fun buildJump(rep: PoseJumpDetector.Rep): Jump? =
+    private fun buildJump(rep: PoseJumpDetector.Rep, flags: List<String> = emptyList()): Jump? =
         JumpCalc.fromFlight(test, athlete, rep.flightS, rep.contactS, mass, box, load, fpsInt(), footer())
-            ?.jump?.copy(notes = "IA en vivo")
+            ?.jump?.copy(notes = "IA en vivo", flags = flags)
 
     private fun save() {
+        cancelAutoSave()
+        BigResult.hide(rootFrame)
         val kept = items.filter { it.kept }
         if (kept.isEmpty()) return
         val base = System.currentTimeMillis()
         if (battery) {
             val best = kept.maxByOrNull { itemHeight(it) }!!
-            val j = buildJump(best.reps.first())?.copy(id = base) ?: return
+            val j = buildJump(best.reps.first(), best.flags)?.copy(id = base) ?: return
             Store.add(this, j)
             items.clear(); refreshChips()
             batterySaved(j)
@@ -531,12 +646,12 @@ class AiCaptureActivity : BaseActivity() {
         }
         val saved = ArrayList<Jump>()
         kept.forEachIndexed { i, it ->
-            val j = if (test == TestType.RJ) {
+            val j = if (test.isRepeated) {
                 val contacts = it.reps.drop(1).map { r -> r.contactS }
                 JumpCalc.repeated(athlete, it.reps.map { r -> r.flightS },
-                    if (contacts.all { c -> c != null }) contacts.filterNotNull() else emptyList(), mass, fpsInt())
-                    ?.copy(notes = "IA en vivo")
-            } else buildJump(it.reps.first())
+                    if (contacts.all { c -> c != null }) contacts.filterNotNull() else emptyList(), mass, fpsInt(), test)
+                    ?.copy(notes = "IA en vivo", flags = it.flags)
+            } else buildJump(it.reps.first(), it.flags)
             j?.let { x -> saved.add(x.copy(id = base + i)) }
         }
         saved.forEach { Store.add(this, it) }
@@ -547,13 +662,15 @@ class AiCaptureActivity : BaseActivity() {
         var msg = if (saved.size == 1) fmt("Guardado: %.1f cm", saved[0].heightCm)
             else fmt("Guardados %d saltos · mejor %.1f cm", saved.size, best?.heightCm ?: 0.0)
         best?.let { JumpCalc.asymmetryNote(this, it) }?.let { msg += "\n$it" }
-        Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
+        saved.lastOrNull()?.let { Attempts.afterSave(this, it) }?.let { msg += "\n$it" }
+        Tst.makeText(this, msg, Toast.LENGTH_LONG).show()
+        if (groupMode) nextTurn()
     }
 
     /** Batería F-V: tras guardar, ofrece la siguiente carga o el perfil. */
     private fun batterySaved(saved: Jump) {
         val next = BatteryActivity.nextPending(this, athlete)
-        val b = AlertDialog.Builder(this)
+        val b = Dlg(this)
             .setTitle(fmt("Carga %.1f kg: %.1f cm", saved.loadKg ?: 0.0, saved.heightCm))
             .setNegativeButton("Volver a la batería") { _, _ -> finish() }
             .setNeutralButton("Repetir esta carga", null)
@@ -574,7 +691,7 @@ class AiCaptureActivity : BaseActivity() {
 
     private fun switchTo240() {
         if (items.any { it.kept }) {
-            AlertDialog.Builder(this)
+            Dlg(this)
                 .setMessage("Hay saltos sin guardar. ¿Cambiar a cámara lenta 240 fps igualmente?")
                 .setPositiveButton("Cambiar") { _, _ -> doSwitch() }
                 .setNegativeButton("Cancelar", null)
@@ -591,7 +708,7 @@ class AiCaptureActivity : BaseActivity() {
     /** Atrás con saltos sin guardar: pregunta antes de salir. */
     private fun handleBack() {
         if (items.any { it.kept } && !battery) {
-            AlertDialog.Builder(this)
+            Dlg(this)
                 .setMessage("Hay saltos sin guardar.")
                 .setPositiveButton("Guardar y salir") { _, _ -> save(); finish() }
                 .setNegativeButton("Salir sin guardar") { _, _ -> finish() }

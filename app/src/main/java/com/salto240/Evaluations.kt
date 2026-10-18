@@ -10,6 +10,9 @@ enum class Metric(val label: String, val unit: String, val higherIsBetter: Boole
     RSI("RSI (Drop Jump)", "", true, 2),
     ASYM("Asimetría", "%", false, 1),
     RJ("Saltos repetidos (media)", "cm", true, 1),
+    RSI105("RSI test 10/5", "", true, 2),
+    POGO("RSI pogo", "", true, 2),
+    ASYM_DJ("Asimetría reactiva (DJ)", "%", false, 1),
     PMAX("Pmax perfil F-V", "W/kg", true, 1),
     FV("Perfil F-V (% del óptimo)", "%", true, 0);
 
@@ -33,6 +36,9 @@ object Evaluations {
         day.filter { it.test == TestType.DJ }.mapNotNull { it.rsi }.maxOrNull()?.let { m[Metric.RSI] = it }
         Analytics.asymmetry(day)?.let { m[Metric.ASYM] = it.third }
         day.filter { it.test == TestType.RJ }.maxByOrNull { it.date }?.let { m[Metric.RJ] = it.heightCm }
+        day.filter { it.test == TestType.RJ105 }.mapNotNull { it.rsi }.maxOrNull()?.let { m[Metric.RSI105] = it }
+        day.filter { it.test == TestType.POGO }.mapNotNull { it.rsi }.maxOrNull()?.let { m[Metric.POGO] = it }
+        Analytics.reactiveAsymmetry(day)?.let { m[Metric.ASYM_DJ] = it.third }
         val hpo = athlete.hpo
         if (hpo != null && day.isNotEmpty()) {
             val d = day.first().day

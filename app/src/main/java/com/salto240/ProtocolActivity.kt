@@ -92,6 +92,21 @@ class ProtocolActivity : BaseActivity() {
                 "Al terminar, quieto 1,5–2 s: la app espera más antes de cerrar la serie.",
                 "Se abre el análisis con todas las marcas puestas para revisar y guardar."
             )),
+            "DJ_L" to ("Drop Jump a una pierna" to listOf(
+                "Cajón bajo (10–20 cm). Dejarse caer y tocar el piso con una sola pierna.",
+                "Rebotar lo más rápido y alto posible con la misma pierna y aterrizar sobre ella.",
+                "Mide las dos piernas el mismo día: al guardar la segunda aparece la asimetría reactiva (RSI)."
+            )),
+            "RJ105" to ("Test 10/5" to listOf(
+                "Dos saltos de preparación y luego 10 saltos seguidos, máxima altura con el menor contacto posible.",
+                "Manos en la cadera. Aterrizar siempre sobre la cruz.",
+                "El RSI 10/5 es la media de los 5 mejores saltos."
+            )),
+            "POGO" to ("Pogo jumps" to listOf(
+                "Saltos seguidos solo con los tobillos: rodillas casi rectas y contacto muy corto.",
+                "10–20 saltos a ritmo propio, en el sitio.",
+                "Contacto deseable: menos de 200 ms."
+            )),
             "FV_BATTERY" to ("Perfil fuerza-velocidad (4 cargas)" to listOf(
                 "Igual que SJ o CMJ, según el protocolo elegido.",
                 "Barra y discos lejos de la franja del suelo.",
@@ -118,7 +133,7 @@ class ProtocolActivity : BaseActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val focus = intent.getStringExtra(EX_FOCUS)?.let { if (it == "CMJ_R") "CMJ_L" else it }
+        val focus = intent.getStringExtra(EX_FOCUS)?.let { when (it) { "CMJ_R" -> "CMJ_L"; "DJ_R" -> "DJ_L"; else -> it } }
         val aiFirst = intent.getBooleanExtra(EX_AI, false)
 
         val root = vbox(14).apply { setPadding(dp(16), dp(20), dp(16), dp(24)) }

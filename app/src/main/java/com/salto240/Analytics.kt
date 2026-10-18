@@ -228,6 +228,18 @@ object Analytics {
         return Triple(l, r, Calc.asymmetry(l, r))
     }
 
+    /** Asimetría reactiva: RSI del Drop Jump a una pierna, día más reciente con ambas piernas. */
+    fun reactiveAsymmetry(js: List<Jump>): Triple<Double, Double, Double>? {
+        fun days(t: TestType) = js.filter { it.test == t && it.rsi != null }.map { it.day }.toSet()
+        val d = days(TestType.DJ_L).intersect(days(TestType.DJ_R)).maxOrNull() ?: return null
+        val l = js.filter { it.test == TestType.DJ_L && it.day == d }.mapNotNull { it.rsi }.max()
+        val r = js.filter { it.test == TestType.DJ_R && it.day == d }.mapNotNull { it.rsi }.max()
+        return Triple(l, r, Calc.asymmetry(l, r))
+    }
+
+    /** Último valor de RSI de una prueba de saltos repetidos (10/5 o pogo). */
+    fun latestRsi(js: List<Jump>, t: TestType): Jump? = js.filter { it.test == t && it.rsi != null }.maxByOrNull { it.date }
+
     fun recommendations(js: List<Jump>, athlete: Athlete): List<Rec> {
         val out = mutableListOf<Rec>()
 
@@ -263,6 +275,33 @@ object Analytics {
             })
         } else {
             out.add(Rec(Level.INFO, "Asimetría", "Mide CMJ a una pierna, izquierda y derecha, el mismo día."))
+        }
+
+        // Asimetría reactiva (Drop Jump a una pierna)
+        reactiveAsymmetry(js)?.let { (l, r, pct) ->
+            val weak = if (l < r) "izquierda" else "derecha"
+            val body = "RSI izquierda ${f2(l)} · derecha ${f2(r)}. "
+            out.add(when {
+                pct >= 15 -> Rec(Level.PRIORITY, "Asimetría reactiva: ${f1(pct)} %",
+                    body + "Supera el 15 %: pliometría a una pierna (saltos laterales, pogo y drop jumps bajos) con más volumen para la pierna $weak. Útil en vuelta a la competición tras lesión.")
+                pct >= 10 -> Rec(Level.WATCH, "Asimetría reactiva: ${f1(pct)} %", body + "Entre 10 y 15 %: incluye pliometría unilateral y vuelve a medir en 4 semanas.")
+                else -> Rec(Level.GOOD, "Asimetría reactiva: ${f1(pct)} %", body + "Por debajo del 10 %: dentro de lo esperable.")
+            })
+        }
+
+        // Test 10/5 y pogo
+        latestRsi(js, TestType.RJ105)?.let { j ->
+            val v = j.rsi!!
+            out.add(when {
+                v < 1.5 -> Rec(Level.WATCH, "Test 10/5 (RSI ${f2(v)})", "Fuerza reactiva en saltos seguidos baja. Prioriza contactos cortos: pogo, saltos de tobillo y vallas bajas.")
+                else -> Rec(Level.GOOD, "Test 10/5 (RSI ${f2(v)})", "Buena capacidad reactiva en saltos seguidos.")
+            })
+        }
+        latestRsi(js, TestType.POGO)?.let { j ->
+            val tc = j.contactMs
+            out.add(if (tc != null && tc > 200) Rec(Level.WATCH, "Pogo jumps (contacto ${tc.toInt()} ms)",
+                "Contacto largo para pogo (lo deseable es menos de 200 ms): trabaja rigidez de tobillo con saltos de tobillo, comba y pogo progresivo.")
+            else Rec(Level.GOOD, "Pogo jumps (RSI ${j.rsi?.let { f2(it) } ?: "—"})", "Buena rigidez de tobillo."))
         }
 
         // Fuerza reactiva (Drop Jump)

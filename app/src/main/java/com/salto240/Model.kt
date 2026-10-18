@@ -14,7 +14,24 @@ enum class TestType(val label: String, val short: String, val help: String) {
     DJ("Drop Jump", "DJ", "Dejarse caer del cajón y rebotar lo más alto y rápido posible."),
     CMJ_L("CMJ pierna izquierda", "CMJ izq.", "CMJ a una pierna, apoyo izquierdo. Úsalo con el derecho para la asimetría."),
     CMJ_R("CMJ pierna derecha", "CMJ der.", "CMJ a una pierna, apoyo derecho. Úsalo con el izquierdo para la asimetría."),
-    RJ("Saltos repetidos", "Repetidos", "Saltos continuos con contacto corto (p. ej. 10 saltos o 15 s). Marca cada despegue y aterrizaje.");
+    RJ("Saltos repetidos", "Repetidos", "Saltos continuos con contacto corto (p. ej. 10 saltos o 15 s). Marca cada despegue y aterrizaje."),
+    DJ_L("Drop Jump pierna izquierda", "DJ izq.", "Drop Jump a una pierna, apoyo izquierdo, desde un cajón bajo (10–20 cm). Con el derecho da la asimetría reactiva."),
+    DJ_R("Drop Jump pierna derecha", "DJ der.", "Drop Jump a una pierna, apoyo derecho, desde un cajón bajo (10–20 cm). Con el izquierdo da la asimetría reactiva."),
+    RJ105("Test 10/5 de saltos repetidos", "10/5", "10 saltos seguidos con contacto lo más corto posible y altura máxima. El RSI es la media de los 5 mejores."),
+    POGO("Pogo jumps", "Pogo", "Saltos seguidos solo con tobillos, rodillas casi extendidas y contacto muy corto (10–20 saltos). Mide la rigidez del tobillo con el RSI.");
+
+    /** Prueba con caída desde cajón (contacto inicial, despegue y aterrizaje). */
+    val isDrop: Boolean get() = this == DJ || this == DJ_L || this == DJ_R
+    /** Serie de saltos seguidos (se marcan todos los despegues y aterrizajes). */
+    val isRepeated: Boolean get() = this == RJ || this == RJ105 || this == POGO
+    /** Prueba a una pierna. */
+    val isSingleLeg: Boolean get() = this == CMJ_L || this == CMJ_R || this == DJ_L || this == DJ_R
+    /** Tipo de detección: DJ, RJ o la propia prueba (saltos simples). */
+    val base: TestType get() = when {
+        isDrop -> DJ
+        isRepeated -> RJ
+        else -> this
+    }
 
     companion object {
         fun of(name: String?): TestType = values().firstOrNull { it.name == name } ?: CMJ
@@ -40,7 +57,8 @@ data class Jump(
     val repContacts: List<Double> = emptyList(), // RJ: contacto antes de cada salto (ms)
     val fatiguePct: Double? = null,           // RJ: caída de altura, primeros 3 vs últimos 3
     val video: String? = null,                // video de la evaluación (file:// propio o content:// de la galería)
-    val marks: List<Int> = emptyList()        // cuadros marcados: [despegue, aterrizaje], DJ [contacto, despegue, aterrizaje], RJ todos
+    val marks: List<Int> = emptyList(),       // cuadros marcados: [despegue, aterrizaje], DJ [contacto, despegue, aterrizaje], RJ todos
+    val flags: List<String> = emptyList()     // avisos de técnica (p. ej. rodillas flexionadas al aterrizar)
 ) {
     val day: String get() = date.take(10)
 
@@ -58,6 +76,7 @@ data class Jump(
         if (repContacts.isNotEmpty()) put("repContacts", JSONArray(repContacts))
         video?.let { put("video", it) }
         if (marks.isNotEmpty()) put("marks", JSONArray(marks))
+        if (flags.isNotEmpty()) put("flags", JSONArray(flags))
     }
 
     companion object {
@@ -86,7 +105,8 @@ data class Jump(
             repContacts = o.optList("repContacts"),
             fatiguePct = o.optD("fatiguePct"),
             video = if (o.has("video")) o.optString("video") else null,
-            marks = o.optJSONArray("marks")?.let { a -> (0 until a.length()).map { a.optInt(it) } } ?: emptyList()
+            marks = o.optJSONArray("marks")?.let { a -> (0 until a.length()).map { a.optInt(it) } } ?: emptyList(),
+            flags = o.optJSONArray("flags")?.let { a -> (0 until a.length()).map { a.optString(it) } } ?: emptyList()
         )
     }
 }

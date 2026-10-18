@@ -54,6 +54,7 @@ class MainActivity : BaseActivity() {
             to.putExtra(EX_BOX, from.getDoubleExtra(EX_BOX, 0.0))
             to.putExtra(EX_LOAD, from.getDoubleExtra(EX_LOAD, 0.0))
             to.putExtra(BatteryActivity.EX_BATTERY, from.getBooleanExtra(BatteryActivity.EX_BATTERY, false))
+            to.putExtra(GroupSession.EX_SESSION, from.getBooleanExtra(GroupSession.EX_SESSION, false))
             return to
         }
 
@@ -93,7 +94,7 @@ class MainActivity : BaseActivity() {
         val pTest = panel()
         pTest.addView(caption("Prueba"))
         val spinner = Spinner(this).apply {
-            adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item,
+            adapter = TrAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item,
                 TestType.values().map { it.label } + "Perfil fuerza-velocidad (4 cargas)")
             setSelection(if (fvBattery) TestType.values().size else test.ordinal)
         }
@@ -144,7 +145,7 @@ class MainActivity : BaseActivity() {
             "Cámara lenta 240 fps · línea del suelo"
         )
         val modeSpinner = Spinner(this).apply {
-            adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item, modes)
+            adapter = TrAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item, modes)
             setSelection(if (CaptureMode.ai(this@MainActivity)) 0 else 1)
             onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
                 override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
@@ -177,6 +178,22 @@ class MainActivity : BaseActivity() {
         pEval.addView(button("Historial") { startActivity(Intent(this, HistoryActivity::class.java)) }, lp())
         root.addView(pEval, lp())
 
+        // Equipos
+        val pTeam = panel()
+        pTeam.addView(caption("Equipos"))
+        pTeam.addView(button("Sesión de grupo con voz", true) { startActivity(Intent(this, GroupSessionActivity::class.java)) }, lp())
+        pTeam.addView(button("Disposición diaria (fatiga)") { startActivity(Intent(this, ReadinessActivity::class.java)) }, lp())
+        pTeam.addView(button("Ranking del grupo") { startActivity(Intent(this, RankingActivity::class.java)) }, lp())
+        root.addView(pTeam, lp())
+
+        // Datos
+        val pData = panel()
+        pData.addView(caption("Datos"))
+        backupInfo = text("", 13f, Col.MUTED)
+        pData.addView(backupInfo)
+        pData.addView(button("Ajustes, copia de seguridad, Excel e idioma") { startActivity(Intent(this, SettingsActivity::class.java)) }, lp())
+        root.addView(pData, lp())
+
         // Cómo grabar
         val pTips = panel()
         pTips.addView(caption("Cómo grabar"))
@@ -186,6 +203,7 @@ class MainActivity : BaseActivity() {
             "• Quieto 1–2 s, saltar, aterrizar en el mismo sitio con piernas extendidas y quedarse quieto 1 s.",
             14f, Col.INK
         ))
+        pTips.addView(button("Guía de primera vez") { startActivity(Intent(this, OnboardingActivity::class.java)) }, lp())
         pTips.addView(button("Protocolo de grabación completo") {
             startActivity(Intent(this, ProtocolActivity::class.java)
                 .putExtra(ProtocolActivity.EX_FOCUS, if (fvBattery) "FV_BATTERY" else test.name))
@@ -216,6 +234,18 @@ class MainActivity : BaseActivity() {
     }
 
     private lateinit var modeInfo: TextView
+    private lateinit var backupInfo: TextView
+
+    private fun showBackupInfo() {
+        if (!::backupInfo.isInitialized) return
+        val last = Backup.lastBackup(this)
+        val due = Backup.reminderDue(this)
+        backupInfo.text = when {
+            Backup.autoFolder(this) != null -> "Copia automática semanal activada · última: " + Backup.pretty(last)
+            else -> "Última copia de seguridad: " + Backup.pretty(last) + if (due) "\n⚠ Haz una copia: los datos solo están en este teléfono." else ""
+        }
+        backupInfo.setTextColor(if (due) Col.WARN else Col.MUTED)
+    }
 
     private fun showModeInfo() {
         val ai = CaptureMode.ai(this)
@@ -236,7 +266,7 @@ class MainActivity : BaseActivity() {
             return
         }
         testHelp.text = test.help
-        boxRow.visibility = if (test == TestType.DJ) View.VISIBLE else View.GONE
+        boxRow.visibility = if (test.isDrop) View.VISIBLE else View.GONE
         loadRow.visibility = if (test == TestType.SJ || test == TestType.CMJ) View.VISIBLE else View.GONE
         recordBtn.text = "Grabar salto"
         galleryBtn.visibility = View.VISIBLE
@@ -248,7 +278,16 @@ class MainActivity : BaseActivity() {
         Updater.check(this)
         // Borra en segundo plano las grabaciones descartadas que no quedaron ligadas a ningún salto.
         val app = applicationContext
-        Thread { try { Videos.cleanOrphans(app) } catch (_: Exception) {} }.start()
+        Thread {
+            try { Videos.cleanOrphans(app) } catch (_: Exception) {}
+            try { Backup.autoIfDue(app) } catch (_: Exception) {}
+            runOnUiThread { if (!isFinishing) showBackupInfo() }
+        }.start()
+        showBackupInfo()
+        if (OnboardingActivity.shouldShow(this)) {
+            OnboardingActivity.markDone(this)
+            startActivity(Intent(this, OnboardingActivity::class.java))
+        }
     }
 
     private fun selectedClient(): Client? = clients.getOrNull(clientSpinner.selectedItemPosition)
@@ -256,7 +295,7 @@ class MainActivity : BaseActivity() {
     private fun loadClients() {
         clients = Clients.all(this)
         val last = getSharedPreferences("salto240", MODE_PRIVATE).getString("lastAthlete", null)
-        clientSpinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item,
+        clientSpinner.adapter = TrAdapter(this, android.R.layout.simple_spinner_dropdown_item,
             if (clients.isEmpty()) listOf("Sin clientes") else clients.map { c ->
                 Clients.groupName(this, c.groupId)?.let { "${c.name} · $it" } ?: c.name
             })
@@ -275,7 +314,7 @@ class MainActivity : BaseActivity() {
     private fun requireClient(): Client? {
         val c = selectedClient()
         if (c == null) {
-            Toast.makeText(this, "Primero crea un cliente.", Toast.LENGTH_SHORT).show()
+            Tst.makeText(this, "Primero crea un cliente.", Toast.LENGTH_SHORT).show()
             startActivity(Intent(this, ClientEditActivity::class.java))
         }
         return c
@@ -350,7 +389,7 @@ class MainActivity : BaseActivity() {
             if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                 startActivity(testIntent(CaptureMode.cls(this)))
             } else {
-                Toast.makeText(this, "Sin permiso de cámara no se puede grabar. Puedes analizar videos de la galería.", Toast.LENGTH_LONG).show()
+                Tst.makeText(this, "Sin permiso de cámara no se puede grabar. Puedes analizar videos de la galería.", Toast.LENGTH_LONG).show()
             }
         }
     }

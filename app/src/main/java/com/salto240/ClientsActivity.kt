@@ -73,7 +73,7 @@ class ClientsActivity : BaseActivity() {
     private fun loadGroups() {
         val prev = groupSpinner.selectedItemPosition
         groups = Clients.groups(this)
-        groupSpinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item,
+        groupSpinner.adapter = TrAdapter(this, android.R.layout.simple_spinner_dropdown_item,
             listOf("Todos los clientes", "Sin grupo") + groups.map { it.name })
         if (prev in 0 until groups.size + 2) groupSpinner.setSelection(prev)
         renderList()
@@ -118,7 +118,7 @@ class ClientsActivity : BaseActivity() {
 
     private fun clientMenu(c: Client) {
         val opts = arrayOf("Medir ahora", "Historial de evaluaciones", "Editar ficha", "Informe y recomendaciones", "Perfil fuerza-velocidad")
-        AlertDialog.Builder(this)
+        Dlg(this)
             .setTitle(c.name)
             .setItems(opts) { _, which ->
                 when (which) {
@@ -141,7 +141,7 @@ class ClientsActivity : BaseActivity() {
     private fun nameDialog(title: String, initial: String, onOk: (String) -> Unit) {
         val e: EditText = input("Nombre del grupo").apply { setText(initial) }
         val box = vbox().apply { setPadding(dp(20), dp(8), dp(20), 0); addView(e, lp()) }
-        AlertDialog.Builder(this)
+        Dlg(this)
             .setTitle(title)
             .setView(box)
             .setPositiveButton("Aceptar") { _, _ -> onOk(e.text.toString()) }
@@ -153,12 +153,12 @@ class ClientsActivity : BaseActivity() {
         val gs = Clients.groups(this)
         val all = Clients.all(this)
         val labels = (listOf("+ Crear grupo") + gs.map { g -> "${g.name}  (${all.count { it.groupId == g.id }})" }).toTypedArray()
-        AlertDialog.Builder(this)
+        Dlg(this)
             .setTitle("Grupos")
             .setItems(labels) { _, which ->
                 if (which == 0) {
                     nameDialog("Nuevo grupo", "") { n ->
-                        if (Clients.addGroup(this, n) == null) Toast.makeText(this, "Nombre vacío o repetido.", Toast.LENGTH_SHORT).show()
+                        if (Clients.addGroup(this, n) == null) Tst.makeText(this, "Nombre vacío o repetido.", Toast.LENGTH_SHORT).show()
                         loadGroups()
                     }
                 } else groupMenu(gs[which - 1])
@@ -168,16 +168,16 @@ class ClientsActivity : BaseActivity() {
     }
 
     private fun groupMenu(g: Group) {
-        AlertDialog.Builder(this)
+        Dlg(this)
             .setTitle(g.name)
             .setItems(arrayOf("Ver sus clientes", "Cambiar nombre", "Borrar grupo")) { _, which ->
                 when (which) {
                     0 -> groupSpinner.setSelection(groups.indexOfFirst { it.id == g.id } + 2)
                     1 -> nameDialog("Cambiar nombre", g.name) { n ->
-                        if (!Clients.renameGroup(this, g.id, n)) Toast.makeText(this, "Nombre vacío o repetido.", Toast.LENGTH_SHORT).show()
+                        if (!Clients.renameGroup(this, g.id, n)) Tst.makeText(this, "Nombre vacío o repetido.", Toast.LENGTH_SHORT).show()
                         loadGroups()
                     }
-                    2 -> AlertDialog.Builder(this)
+                    2 -> Dlg(this)
                         .setTitle("¿Borrar el grupo ${g.name}?")
                         .setMessage("Los clientes no se borran: quedan sin grupo.")
                         .setPositiveButton("Borrar") { _, _ -> Clients.deleteGroup(this, g.id); loadGroups() }

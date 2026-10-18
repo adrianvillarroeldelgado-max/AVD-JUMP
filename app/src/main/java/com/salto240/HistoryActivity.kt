@@ -72,7 +72,7 @@ class HistoryActivity : BaseActivity() {
         list.setOnItemClickListener { _, _, pos, _ -> jumpMenu(rows[pos]) }
         list.setOnItemLongClickListener { _, _, pos, _ ->
             val j = rows[pos]
-            AlertDialog.Builder(this)
+            Dlg(this)
                 .setTitle("¿Borrar este salto?")
                 .setMessage(String.format(Locale.getDefault(), "%s · %s · %.1f cm\n%s", j.athlete, j.test.label, j.heightCm, j.date))
                 .setPositiveButton("Borrar") { _, _ -> Store.delete(this, j.id); loadNames() }
@@ -93,7 +93,7 @@ class HistoryActivity : BaseActivity() {
     private fun loadGroups() {
         val prev = selectedGroup()?.id
         groups = Clients.groups(this)
-        groupSpinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item,
+        groupSpinner.adapter = TrAdapter(this, android.R.layout.simple_spinner_dropdown_item,
             listOf("Todos los grupos") + groups.map { it.name })
         val idx = groups.indexOfFirst { it.id == prev }
         if (idx >= 0) groupSpinner.setSelection(idx + 1)
@@ -104,7 +104,7 @@ class HistoryActivity : BaseActivity() {
         val prev = spinner.selectedItem as? String
         val g = selectedGroup()
         names = listOf("Todos") + (if (g == null) Store.athletes(this) else Clients.inGroup(this, g.id).map { it.name })
-        spinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, names)
+        spinner.adapter = TrAdapter(this, android.R.layout.simple_spinner_dropdown_item, names)
         val wanted = prev ?: preselect
         preselect = null
         val idx = names.indexOf(wanted)
@@ -124,24 +124,24 @@ class HistoryActivity : BaseActivity() {
     /** Borra los saltos que se están mostrando (según el grupo y el atleta elegidos). */
     private fun deleteShown() {
         if (rows.isEmpty()) {
-            Toast.makeText(this, "No hay saltos para borrar.", Toast.LENGTH_SHORT).show()
+            Tst.makeText(this, "No hay saltos para borrar.", Toast.LENGTH_SHORT).show()
             return
         }
         val who = (spinner.selectedItem as? String)?.takeIf { spinner.selectedItemPosition > 0 }
             ?: selectedGroup()?.name?.let { "el grupo $it" } ?: "todos los atletas"
         val n = rows.size
         val nVid = rows.count { it.video != null }
-        AlertDialog.Builder(this)
+        Dlg(this)
             .setTitle("¿Borrar $n " + (if (n == 1) "salto" else "saltos") + " de $who?")
             .setMessage("Se borran los resultados" + (if (nVid > 0) " y $nVid videos" else "") +
                 ". Las fichas de los clientes se conservan. No se puede deshacer.\n\nPara borrar uno solo, tócalo en la lista.")
             .setPositiveButton("Borrar") { _, _ ->
-                AlertDialog.Builder(this)
+                Dlg(this)
                     .setTitle("Confirma el borrado")
                     .setMessage("Vas a borrar $n " + (if (n == 1) "salto." else "saltos."))
                     .setPositiveButton("Borrar") { _, _ ->
                         val done = Store.deleteMany(this, rows.map { it.id }.toSet())
-                        Toast.makeText(this, "$done saltos borrados.", Toast.LENGTH_SHORT).show()
+                        Tst.makeText(this, "$done saltos borrados.", Toast.LENGTH_SHORT).show()
                         loadNames()
                     }
                     .setNegativeButton("Cancelar", null)
@@ -157,11 +157,11 @@ class HistoryActivity : BaseActivity() {
             if (on) "No guardar los videos de los próximos saltos" else "Guardar los videos de los próximos saltos",
             "Borrar todos los videos (los resultados se conservan)"
         )
-        AlertDialog.Builder(this)
+        Dlg(this)
             .setTitle("Videos de las evaluaciones")
             .setItems(opts) { _, w ->
                 if (w == 0) { Videos.setEnabled(this, !on); refreshVideoInfo() }
-                else AlertDialog.Builder(this)
+                else Dlg(this)
                     .setTitle("¿Borrar todos los videos?")
                     .setMessage("Se libera " + Videos.humanSize(Videos.usedBytes(this)) + ". Los resultados de los saltos no se borran, pero ya no se podrán volver a medir a mano.")
                     .setPositiveButton("Borrar videos") { _, _ -> Videos.removeAll(this); refresh() }
@@ -177,18 +177,18 @@ class HistoryActivity : BaseActivity() {
         val labels = ArrayList<String>(); val acts = ArrayList<() -> Unit>()
         if (avail) {
             labels.add("Ver video y medir a mano"); acts.add {
-                if (!Videos.openForReview(this, j)) Toast.makeText(this, "El video ya no está disponible.", Toast.LENGTH_LONG).show()
+                if (!Videos.openForReview(this, j)) Tst.makeText(this, "El video ya no está disponible.", Toast.LENGTH_LONG).show()
             }
             labels.add("Guardar video en la galería"); acts.add {
                 Thread {
                     val msg = Videos.exportToGallery(this, j)
-                    runOnUiThread { Toast.makeText(this, msg, Toast.LENGTH_LONG).show() }
+                    runOnUiThread { Tst.makeText(this, msg, Toast.LENGTH_LONG).show() }
                 }.start()
             }
         }
         if (has) { labels.add("Quitar el video de este salto"); acts.add { Videos.removeFromJump(this, j); refresh() } }
         labels.add("Borrar salto"); acts.add {
-            AlertDialog.Builder(this)
+            Dlg(this)
                 .setTitle("¿Borrar este salto?")
                 .setMessage(String.format(Locale.getDefault(), "%s · %s · %.1f cm\n%s", j.athlete, j.test.label, j.heightCm, j.date))
                 .setPositiveButton("Borrar") { _, _ -> Store.delete(this, j.id); loadNames() }
@@ -196,7 +196,7 @@ class HistoryActivity : BaseActivity() {
                 .show()
         }
         val title = String.format(Locale.getDefault(), "%s · %.1f cm", j.test.label, j.heightCm)
-        AlertDialog.Builder(this)
+        Dlg(this)
             .setTitle(title)
             .setMessage(when {
                 avail -> j.date + " · " + j.athlete + " · video guardado (" + j.fps + " fps)"
@@ -217,7 +217,7 @@ class HistoryActivity : BaseActivity() {
         fun cm(d: Double?) = d?.let { String.format(Locale.getDefault(), "%.1f cm", it) } ?: "—"
         val bestCmj = Analytics.best(rows, TestType.CMJ)
         val bestCmja = Analytics.best(rows, TestType.CMJA)
-        val bestRsi = rows.filter { it.test == TestType.DJ }.mapNotNull { it.rsi }.maxOrNull()
+        val bestRsi = rows.filter { it.test.isDrop }.mapNotNull { it.rsi }.maxOrNull()
         val sb = StringBuilder()
         sb.append("Mejor CMJ: ").append(cm(bestCmj)).append('\n')
         sb.append("Mejor CMJ brazos: ").append(cm(bestCmja)).append('\n')
@@ -240,19 +240,20 @@ class HistoryActivity : BaseActivity() {
                 val t1 = v.findViewById<TextView>(android.R.id.text1)
                 val t2 = v.findViewById<TextView>(android.R.id.text2)
                 val loadTxt = j.loadKg?.takeIf { it > 0 }?.let { String.format(Locale.getDefault(), " +%.1f kg", it) } ?: ""
-                val prefix = if (j.test == TestType.RJ) "media " else ""
+                val prefix = if (j.test.isRepeated) "media " else ""
                 t1.text = String.format(Locale.getDefault(), "%s%.1f cm   %s%s", prefix, j.heightCm, j.test.label, loadTxt)
                 t1.setTextColor(when (j.test) {
                     TestType.CMJ, TestType.SJ -> Col.TRACK
                     TestType.CMJA -> Col.OK
-                    TestType.DJ, TestType.RJ -> Col.ACCENT
-                    TestType.CMJ_L, TestType.CMJ_R -> Col.WARN
+                    TestType.DJ, TestType.RJ, TestType.RJ105, TestType.POGO -> Col.ACCENT
+                    TestType.CMJ_L, TestType.CMJ_R, TestType.DJ_L, TestType.DJ_R -> Col.WARN
                 })
                 var extra = if (j.rsi != null && j.contactMs != null)
                     String.format(Locale.getDefault(), " · TC %.0f ms · RSI %.2f", j.contactMs, j.rsi) else ""
                 if (j.reps.isNotEmpty()) extra += String.format(Locale.getDefault(), " · %d saltos", j.reps.size)
                 j.fatiguePct?.let { extra += String.format(Locale.getDefault(), " · caída %.1f %%", it) }
                 if (j.video != null) extra += " · video"
+                if (j.flags.isNotEmpty()) extra += " · ⚠ " + j.flags.joinToString(" ") { f -> if (f == Technique.MSG_KNEES) "rodillas" else if (f == Technique.MSG_HANDS) "manos" else f }
                 t2.text = String.format(Locale.getDefault(), "%s · %s · TV %.0f ms%s%s",
                     j.date, j.athlete, j.flightMs, extra, if (j.notes.isNotEmpty()) " · " + j.notes else "")
                 t2.setTextColor(Col.MUTED)

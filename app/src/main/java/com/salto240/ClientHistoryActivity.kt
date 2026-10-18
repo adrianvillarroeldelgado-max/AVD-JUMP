@@ -58,6 +58,13 @@ class ClientHistoryActivity : BaseActivity() {
         }, lp(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
         actions.addView(button("Compartir", true) { share() }, lp(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
         root.addView(actions, lp())
+        root.addView(button("Informe en PDF con logo", true) { PdfShare.run(this, name) }, lp())
+        val more = hbox(8)
+        more.addView(button("Altura óptima de Drop Jump") {
+            startActivity(Intent(this, DjHeightActivity::class.java).putExtra(MainActivity.EX_ATHLETE, name))
+        }, lp(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        more.addView(button("Percentiles") { showPercentiles() }, lp(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        root.addView(more, lp())
 
         setContentView(ScrollView(this).apply { setBackgroundColor(Col.BG); addView(root) })
 
@@ -78,13 +85,16 @@ class ClientHistoryActivity : BaseActivity() {
         evals = Evaluations.list(Store.all(this), athlete)
         val g = client?.let { Clients.groupName(this, it.groupId) }
         header.text = listOfNotNull(name, g, client?.summary()).joinToString(" · ") +
-            "\n${evals.size} evaluaciones · ${evals.sumOf { it.jumps.size }} saltos"
+            "\n${evals.size} evaluaciones · ${evals.sumOf { it.jumps.size }} saltos" +
+            (Readiness.of(Store.ofAthlete(this, name))?.let { r ->
+                "\nDisposición " + Evaluations.pretty(r.day) + ": " + r.light.label + " · " + r.line()
+            } ?: "")
 
         // Solo los indicadores que tienen datos; primero el que más se repite.
         val prev = metrics.getOrNull(metricSpinner.selectedItemPosition)
         metrics = Metric.values().filter { m -> evals.any { it.values.containsKey(m) } }
             .sortedByDescending { m -> evals.count { it.values.containsKey(m) } }
-        metricSpinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item,
+        metricSpinner.adapter = TrAdapter(this, android.R.layout.simple_spinner_dropdown_item,
             if (metrics.isEmpty()) listOf("Sin evaluaciones") else metrics.map { it.label })
         metrics.indexOf(prev).takeIf { it >= 0 }?.let { metricSpinner.setSelection(it) }
         renderTrend()
@@ -140,6 +150,15 @@ class ClientHistoryActivity : BaseActivity() {
                     card.addView(text("   $dTxt vs. evaluación anterior", 12f, color))
                 }
             }
+            // Intentos por prueba: mejor, media, CV y avisos.
+            val att = Attempts.summarize(e.jumps)
+            if (att.isNotEmpty()) {
+                card.addView(caption("Intentos"))
+                for (s in att) {
+                    card.addView(text(s.line(), 13f, Col.INK))
+                    s.warnings().forEach { w -> card.addView(text("   ⚠ $w", 12f, Col.WARN)) }
+                }
+            }
             if (e.values.isEmpty()) card.addView(text("Sin indicadores calculables (p. ej. solo saltos con carga sin completar el perfil).", 12f, Col.MUTED))
             if (e.notes.isNotEmpty()) card.addView(text("Notas: " + e.notes.joinToString(" · "), 12f, Col.MUTED))
             val btns = hbox(8)
@@ -155,7 +174,7 @@ class ClientHistoryActivity : BaseActivity() {
 
     private fun jumpLabel(j: Jump): String {
         val load = j.loadKg?.takeIf { it > 0 }?.let { f(" +%.1f kg", it) } ?: ""
-        val extra = if (j.test == TestType.RJ) " (media)" else ""
+        val extra = if (j.test.isRepeated) " (media)" else ""
         return f("%s%s · %.1f cm%s · %s%s", j.test.short, load, j.heightCm, extra, j.date.drop(11), if (j.video != null) " · video" else "")
     }
 
@@ -163,13 +182,13 @@ class ClientHistoryActivity : BaseActivity() {
     private fun jumpsOf(e: Evaluation) {
         val js = e.jumps
         val checked = BooleanArray(js.size)
-        AlertDialog.Builder(this)
+        Dlg(this)
             .setTitle("Saltos del " + Evaluations.pretty(e.day))
             .setMultiChoiceItems(js.map { jumpLabel(it) }.toTypedArray(), checked) { _, w, on -> checked[w] = on }
             .setPositiveButton("Borrar marcados") { _, _ ->
                 val ids = js.indices.filter { checked[it] }.map { js[it].id }.toSet()
                 if (ids.isEmpty()) {
-                    Toast.makeText(this, "No marcaste ningún salto.", Toast.LENGTH_SHORT).show()
+                    Tst.makeText(this, "No marcaste ningún salto.", Toast.LENGTH_SHORT).show()
                 } else confirm(
                     if (ids.size == 1) "¿Borrar 1 salto?" else "¿Borrar ${ids.size} saltos?",
                     "Se borran sus resultados y sus videos. No se puede deshacer."
@@ -189,7 +208,7 @@ class ClientHistoryActivity : BaseActivity() {
             "Se borran sus ${e.jumps.size} saltos" + (if (nVid > 0) " y $nVid videos" else "") + ". No se puede deshacer."
         ) {
             val n = Store.deleteMany(this, e.jumps.map { it.id }.toSet())
-            Toast.makeText(this, "Evaluación borrada ($n saltos).", Toast.LENGTH_SHORT).show()
+            Tst.makeText(this, "Evaluación borrada ($n saltos).", Toast.LENGTH_SHORT).show()
             load()
         }
     }
@@ -204,14 +223,14 @@ class ClientHistoryActivity : BaseActivity() {
             // Segunda confirmación: es la acción más destructiva.
             confirm("Confirma el borrado", "Vas a borrar ${all.size} saltos de $name.") {
                 Store.deleteMany(this, all.map { it.id }.toSet())
-                Toast.makeText(this, "Resultados de $name borrados.", Toast.LENGTH_SHORT).show()
+                Tst.makeText(this, "Resultados de $name borrados.", Toast.LENGTH_SHORT).show()
                 load()
             }
         }
     }
 
     private fun confirm(title: String, msg: String, onYes: () -> Unit) {
-        AlertDialog.Builder(this)
+        Dlg(this)
             .setTitle(title)
             .setMessage(msg)
             .setPositiveButton("Borrar") { _, _ -> onYes() }
@@ -219,11 +238,23 @@ class ClientHistoryActivity : BaseActivity() {
             .show()
     }
 
+    private fun showPercentiles() {
+        val lines = Norms.lines(this, name)
+        Dlg(this)
+            .setTitle("Comparación con referencias")
+            .setMessage(if (lines.isEmpty()) "Todavía no hay con quién comparar. Los percentiles se calculan con los demás clientes " +
+                "del mismo sexo (y deporte, si hay suficientes) y con los valores de referencia que cargues en Ajustes y datos."
+                else lines.joinToString("\n\n"))
+            .setPositiveButton("Cerrar", null)
+            .setNeutralButton("Referencias") { _, _ -> startActivity(Intent(this, RefsActivity::class.java)) }
+            .show()
+    }
+
     private fun share() {
         val i = Intent(Intent.ACTION_SEND).apply {
             type = "text/plain"
             putExtra(Intent.EXTRA_SUBJECT, "Historial de evaluaciones — $name")
-            putExtra(Intent.EXTRA_TEXT, Evaluations.summaryText(name, evals))
+            putExtra(Intent.EXTRA_TEXT, Lang.tr(this@ClientHistoryActivity, Evaluations.summaryText(name, evals)))
         }
         startActivity(Intent.createChooser(i, "Compartir historial"))
     }

@@ -84,6 +84,15 @@ class CaptureActivity : BaseActivity() {
     private var recRequest: CaptureRequest.Builder? = null
     private val prefs get() = getSharedPreferences("salto240", MODE_PRIVATE)
 
+    // --- Sesión de grupo, voz, nivel y control remoto ---
+    private var groupMode = false
+    private lateinit var rootFrame: FrameLayout
+    private lateinit var topText: TextView
+    private lateinit var level: LevelView
+    /** Botón principal de la tarjeta (lo pulsa el control remoto). */
+    private var cardPrimary: Button? = null
+    private var autoSave: Runnable? = null
+
     companion object {
         /** Posición vertical de la línea del suelo en la imagen (0 arriba, 1 abajo). */
         const val EX_FLOOR_V = "floorV"
@@ -121,7 +130,7 @@ class CaptureActivity : BaseActivity() {
         cfg = HighSpeed.find(this)
         val c = cfg
         if (c == null) {
-            Toast.makeText(this, "No se encontró una cámara trasera.", Toast.LENGTH_LONG).show()
+            Tst.makeText(this, "No se encontró una cámara trasera.", Toast.LENGTH_LONG).show()
             finish(); return
         }
 
@@ -134,13 +143,15 @@ class CaptureActivity : BaseActivity() {
 
         test = TestType.of(intent.getStringExtra(MainActivity.EX_TEST))
         battery = intent.getBooleanExtra(BatteryActivity.EX_BATTERY, false)
+        groupMode = intent.getBooleanExtra(GroupSession.EX_SESSION, false) && GroupSession.get(this)?.finished == false
         detector = LiveDetector(test)
-        live = prefs.getBoolean("liveMode", true)
-        val top = text("${test.label} · ${intent.getStringExtra(MainActivity.EX_ATHLETE) ?: ""}\n${c.fps} fps · ${c.size.width}×${c.size.height}" +
-                if (!c.highSpeed) "  (sin modo cámara lenta)" else "", 14f, 0xFFFFFFFF.toInt(), true).apply {
+        live = groupMode || prefs.getBoolean("liveMode", true)
+        rootFrame = root
+        val top = text(topLabel(), 14f, 0xFFFFFFFF.toInt(), true).apply {
             setBackgroundColor(0x99000000.toInt())
             setPadding(dp(12), dp(10), dp(12), dp(10))
         }
+        topText = top
         root.addView(top, FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.START).apply {
             setMargins(dp(12), dp(12), dp(124), 0)
@@ -153,6 +164,15 @@ class CaptureActivity : BaseActivity() {
             FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.END).apply {
             setMargins(dp(12), dp(12), dp(12), 0)
         })
+
+        // Nivel de la cámara (acelerómetro).
+        level = LevelView(this)
+        root.addView(level, FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply {
+            topMargin = dp(84)
+        })
+        Voice.init(this)
+        if (groupMode) GroupSession.get(this)?.let { Voice.say(this, GroupSession.announce(it)) }
 
         // Línea del suelo (arrastrable): la detección automática analiza la franja justo encima.
         guideFrac = getSharedPreferences("salto240", MODE_PRIVATE).getFloat("guideFrac", 0.72f)
@@ -235,6 +255,7 @@ class CaptureActivity : BaseActivity() {
         camThread = HandlerThread("cam").also { it.start() }
         camHandler = Handler(camThread!!.looper)
         if (texture.isAvailable) openCamera()
+        level.start()
     }
 
     private var askedPermission = false
@@ -242,12 +263,14 @@ class CaptureActivity : BaseActivity() {
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (grantResults.isEmpty() || grantResults[0] != android.content.pm.PackageManager.PERMISSION_GRANTED) {
-            Toast.makeText(this, "Sin permiso de cámara no se puede grabar.", Toast.LENGTH_LONG).show()
+            Tst.makeText(this, "Sin permiso de cámara no se puede grabar.", Toast.LENGTH_LONG).show()
             finish()
         }
     }
 
     override fun onPause() {
+        level.stop()
+        cancelAutoSave()
         if (recording) stopRecording(false)
         if (starting && ::recBtn.isInitialized) { starting = false; recBtn.isEnabled = true }
         closeCamera()
@@ -256,7 +279,7 @@ class CaptureActivity : BaseActivity() {
         super.onPause()
     }
 
-    private fun toast(msg: String) = main.post { Toast.makeText(this, msg, Toast.LENGTH_LONG).show() }
+    private fun toast(msg: String) = main.post { Tst.makeText(this, msg, Toast.LENGTH_LONG).show() }
 
     @SuppressLint("MissingPermission")
     private fun openCamera() {
@@ -267,6 +290,10 @@ class CaptureActivity : BaseActivity() {
                 override fun onOpened(device: CameraDevice) {
                     camera = device
                     main.post { startPreview() }
+                    // Sesión de grupo: la grabación en vivo arranca sola.
+                    if (groupMode) main.postDelayed({
+                        if (groupMode && camera != null && !recording && !starting && card.visibility != android.view.View.VISIBLE) startRecording()
+                    }, 1500)
                 }
                 override fun onDisconnected(device: CameraDevice) {
                     device.close(); camera = null
@@ -489,13 +516,15 @@ class CaptureActivity : BaseActivity() {
         val f = haltRecording()
         if (!openAnalysis) return
         if (f == null) {
-            Toast.makeText(this, "La grabación fue demasiado corta. Intenta de nuevo.", Toast.LENGTH_LONG).show()
+            Tst.makeText(this, "La grabación fue demasiado corta. Intenta de nuevo.", Toast.LENGTH_LONG).show()
             info.text = idleHint()
             startPreview()
             return
         }
         prefs.edit().putFloat("guideFrac", guideFrac).apply()
-        startActivity(analysisIntent(f, c.fps, null))
+        val real = FpsCheck.ofFile(f, c.fps)
+        if (real != null) Tst.makeText(this, "El teléfono grabó a $real fps reales (no ${c.fps}): se mide con $real fps.", Toast.LENGTH_LONG).show()
+        startActivity(analysisIntent(f, real ?: c.fps, null))
         finish()
     }
 
@@ -593,22 +622,31 @@ class CaptureActivity : BaseActivity() {
         showCard(
             status = fmt("Provisional (vista previa, %.0f fps) · midiendo a %d fps…", l.previewFps, c.fps),
             big = when {
-                test == TestType.RJ -> fmt("%d saltos", l.eventsS.size / 2)
+                test.isRepeated -> fmt("%d saltos", l.eventsS.size / 2)
                 else -> l.flightS?.let { fmt("≈ %.1f cm", Calc.heightCm(it)) } ?: "…"
             },
             bigColor = 0xFF8C99AD.toInt(),
-            detail = l.flightS?.takeIf { test != TestType.RJ }?.let { fmt("Vuelo ≈ %.0f ms", it * 1000) } ?: ""
+            detail = l.flightS?.takeIf { !test.isRepeated }?.let { fmt("Vuelo ≈ %.0f ms", it * 1000) } ?: ""
         )
         cardButtons.removeAllViews()
+        cardPrimary = null
 
-        val fps = c.fps
         val g = guideFrac
         val t = test
+        val tech = Technique.enabled(this)
         work.execute {
             var r: AutoDetect.Result? = null
+            var fps = c.fps
+            var flags: List<String> = emptyList()
+            var fpsNote: String? = null
             try {
                 val src = FrameSource(this, Uri.fromFile(f))
                 try {
+                    // Comprobación de los fps reales del archivo: algunos teléfonos entregan menos de lo pedido sin avisar.
+                    FpsCheck.real(src.fileFps, c.fps)?.let { real ->
+                        fpsNote = "El teléfono grabó a $real fps reales (no ${c.fps}): se mide con $real fps."
+                        fps = real
+                    }
                     fun scan(range: IntRange?): AutoDetect.Result? {
                         val strips = if (range == null) src.scanStrip(AutoDetect.X0, AutoDetect.X1, AutoDetect.bandTop(g), AutoDetect.bandBottom(g), progress = {}, cancelled = { isFinishing })
                             else src.scanStrip(AutoDetect.X0, AutoDetect.X1, AutoDetect.bandTop(g), AutoDetect.bandBottom(g), progress = {}, cancelled = { isFinishing },
@@ -617,14 +655,14 @@ class CaptureActivity : BaseActivity() {
                         return if (range == null) res else res.shift(range.first)
                     }
                     fun ok(x: AutoDetect.Result?) = x != null &&
-                        (if (t == TestType.RJ) x.events.size >= 2 else x.takeoff != null && x.landing != null)
+                        (if (t.isRepeated) x.events.size >= 2 else x.takeoff != null && x.landing != null)
                     fun flightS(x: AutoDetect.Result?): Double? = when {
                         x == null -> null
-                        t == TestType.RJ -> x.events.takeIf { it.size >= 2 }?.let { (it[1] - it[0]).toDouble() / fps }
+                        t.isRepeated -> x.events.takeIf { it.size >= 2 }?.let { (it[1] - it[0]).toDouble() / fps }
                         x.takeoff != null && x.landing != null -> (x.landing - x.takeoff).toDouble() / fps
                         else -> null
                     }
-                    val liveFlight = if (t == TestType.RJ) l.eventsS.takeIf { it.size >= 2 }?.let { it[1] - it[0] } else l.flightS
+                    val liveFlight = if (t.isRepeated) l.eventsS.takeIf { it.size >= 2 }?.let { it[1] - it[0] } else l.flightS
                     fun off(x: AutoDetect.Result?): Double = flightS(x)?.let { f -> liveFlight?.let { abs(f - it) } } ?: 9.0
                     val n = src.frameCount
                     if (n > 1) {
@@ -636,31 +674,54 @@ class CaptureActivity : BaseActivity() {
                         }
                         if (!ok(r)) r = null
                     }
+                    // Control de técnica con el modelo de pose (si el cuerpo se ve en el video).
+                    val rr = r
+                    if (tech && rr?.takeoff != null && rr.landing != null && !t.isRepeated) {
+                        val tk = listOfNotNull(src.frame(rr.takeoff - 3), src.frame(rr.takeoff))
+                        val ld = listOfNotNull(src.frame(rr.landing - 2), src.frame(rr.landing))
+                        flags = Technique.checkVideo(t, tk, ld)
+                    }
                 } finally {
                     src.release()
                 }
             } catch (_: Exception) {
                 r = null
             }
-            main.post { if (!isFinishing && !isDestroyed) onPrecise(f, fps, l, r) }
+            val fpsFinal = fps; val flagsFinal = flags; val noteFinal = fpsNote
+            main.post { if (!isFinishing && !isDestroyed) onPrecise(f, fpsFinal, l, r, flagsFinal, noteFinal) }
         }
     }
 
-    private fun onPrecise(f: File, fps: Int, l: LiveDetector.Live, r: AutoDetect.Result?) {
+    private fun onPrecise(f: File, fps: Int, l: LiveDetector.Live, r: AutoDetect.Result?,
+                          flags: List<String> = emptyList(), fpsNote: String? = null) {
         // Batería F-V y saltos repetidos tienen su propio flujo de guardado: van al análisis con las marcas puestas.
-        if (battery || test == TestType.RJ) {
+        if (battery || (test.isRepeated && !groupMode)) {
             startActivity(analysisIntent(f, fps, r))
             finish()
             return
         }
-        val mass = intent.getDoubleExtra(MainActivity.EX_MASS, 0.0).takeIf { it > 0 }
+        val mass = (if (groupMode) null else intent.getDoubleExtra(MainActivity.EX_MASS, 0.0).takeIf { it > 0 })
             ?: Store.athlete(this, athleteName()).massKg
         val box = intent.getDoubleExtra(MainActivity.EX_BOX, 0.0).takeIf { it > 0 }
         val load = if (test == TestType.SJ || test == TestType.CMJ) intent.getDoubleExtra(MainActivity.EX_LOAD, 0.0) else null
-        val out = if (r?.takeoff != null && r.landing != null)
-            JumpCalc.single(this, test, athleteName(), fps, r.takeoff, r.landing, r.contact, mass, box, load) else null
+        val out = when {
+            test.isRepeated -> r?.events?.takeIf { it.size >= 2 }?.let { ev ->
+                // Serie de saltos (sesión de grupo): vuelos y contactos desde las marcas.
+                val n = ev.size / 2
+                val flights = (0 until n).map { (ev[2 * it + 1] - ev[2 * it]).toDouble() / fps }
+                val contacts = (1 until n).map { (ev[2 * it] - ev[2 * it - 1]).toDouble() / fps }
+                JumpCalc.repeated(athleteName(), flights, contacts, mass, fps, test)?.let { j ->
+                    JumpCalc.Out(j, fmt("%d saltos · altura media %.1f cm", n, j.heightCm) +
+                        (j.rsi?.let { fmt(" · RSI %.2f", it) } ?: "") + (j.contactMs?.let { fmt(" · contacto %.0f ms", it) } ?: ""))
+                }
+            }
+            r?.takeoff != null && r.landing != null ->
+                JumpCalc.single(this, test, athleteName(), fps, r.takeoff, r.landing, r.contact, mass, box, load)
+            else -> null
+        }
 
         cardButtons.removeAllViews()
+        cardPrimary = null
         recBtn.isEnabled = true
         if (out == null) {
             info.text = "Revisa el salto cuadro a cuadro."
@@ -668,13 +729,15 @@ class CaptureActivity : BaseActivity() {
                 status = "No se pudo medir a $fps fps con seguridad.",
                 big = l.flightS?.let { fmt("≈ %.1f cm", Calc.heightCm(it)) } ?: "—",
                 bigColor = 0xFF8C99AD.toInt(),
-                detail = if (test == TestType.DJ) "Falta el contacto inicial tras la caída. Márcalo a mano en la revisión."
+                detail = if (test.isDrop) "Falta el contacto inicial tras la caída. Márcalo a mano en la revisión."
                     else "Revisa la línea del suelo y marca a mano el despegue y el aterrizaje."
             )
             cardButtons.addView(button("Revisar cuadro a cuadro", true) {
                 startActivity(analysisIntent(f, fps, r)); finish()
             }, lp())
             cardButtons.addView(button("Repetir salto") { f.delete(); restartLive(null) }, lp())
+            cardPrimary = null
+            Voice.say(this, "No se pudo medir. Repite el salto.")
             return
         }
 
@@ -683,29 +746,113 @@ class CaptureActivity : BaseActivity() {
             "Definitivo a $fps fps · difiere de la vista previa: conviene revisarlo"
         else "Definitivo · ${test.short} · ${athleteName()}"
         info.text = "Salto medido."
-        showCard(status, fmt("%.1f cm", out.jump.heightCm), 0xFFFFFFFF.toInt(), out.detail)
-        cardButtons.addView(button("Guardar y siguiente", true) {
+        val warn = (listOfNotNull(fpsNote) + flags).joinToString("") { "\n⚠ $it" }
+        val bigTxt = if (test.isRepeated && out.jump.rsi != null) fmt("RSI %.2f", out.jump.rsi) else fmt("%.1f cm", out.jump.heightCm)
+        showCard(status, bigTxt, if (flags.isEmpty()) 0xFFFFFFFF.toInt() else 0xFFFFC04D.toInt(), out.detail + warn)
+        // Resultado en voz alta y en grande.
+        val said = when {
+            test.isRepeated && out.jump.rsi != null -> "RSI " + Voice.num(this, out.jump.rsi, 2)
+            test.isDrop && out.jump.rsi != null -> Voice.num(this, out.jump.heightCm) + " centímetros. RSI " + Voice.num(this, out.jump.rsi, 2)
+            else -> Voice.num(this, out.jump.heightCm) + " centímetros"
+        }
+        Voice.say(this, "${athleteName()}, $said" + if (flags.contains(Technique.MSG_KNEES)) ". Atención: rodillas flexionadas al aterrizar." else "")
+        BigResult.show(rootFrame, athleteName(), bigTxt, out.detail.lineSequence().firstOrNull() ?: "",
+            if (flags.isEmpty()) 0xFFFFFFFF.toInt() else 0xFFFFC04D.toInt())
+
+        val doSave = {
+            cancelAutoSave()
+            BigResult.hide(rootFrame)
             // El video queda ligado al salto: se puede revisar o volver a medir a mano desde el historial.
             val keep = Videos.enabled(this)
-            val mk = if (test == TestType.DJ) listOfNotNull(r?.contact, r?.takeoff, r?.landing).takeIf { it.size == 3 }
-                else listOfNotNull(r?.takeoff, r?.landing).takeIf { it.size == 2 }
-            val saved = out.jump.copy(video = if (keep) Uri.fromFile(f).toString() else null, marks = mk ?: emptyList())
+            val mk = when {
+                test.isRepeated -> r?.events
+                test.isDrop -> listOfNotNull(r?.contact, r?.takeoff, r?.landing).takeIf { it.size == 3 }
+                else -> listOfNotNull(r?.takeoff, r?.landing).takeIf { it.size == 2 }
+            }
+            val saved = out.jump.copy(video = if (keep) Uri.fromFile(f).toString() else null, marks = mk ?: emptyList(), flags = flags)
             Store.add(this, saved)
-            val note = JumpCalc.asymmetryNote(this, saved)
-            Toast.makeText(this, fmt("Guardado: %.1f cm", saved.heightCm) + (if (keep) " · con video" else "") +
+            val note = listOfNotNull(JumpCalc.asymmetryNote(this, saved), Attempts.afterSave(this, saved)).joinToString("\n").ifEmpty { null }
+            Tst.makeText(this, fmt("Guardado: %.1f cm", saved.heightCm) + (if (keep) " · con video" else "") +
                 (note?.let { "\n$it" } ?: ""), Toast.LENGTH_LONG).show()
             if (!keep) f.delete()
-            restartLive(null)
-        }, lp())
+            nextTurn()
+        }
+        val saveBtn = button(if (groupMode) "Guardar y siguiente atleta" else "Guardar y siguiente", true) { doSave() }
+        cardButtons.addView(saveBtn, lp())
+        cardPrimary = saveBtn
         val row = hbox(8)
-        row.addView(button("Revisar") { startActivity(analysisIntent(f, fps, r)); finish() },
+        row.addView(button("Revisar") { cancelAutoSave(); startActivity(analysisIntent(f, fps, r)); finish() },
             lp(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-        row.addView(button("Repetir") { f.delete(); restartLive(null) },
+        row.addView(button("Repetir") { cancelAutoSave(); f.delete(); restartLive(null) },
             lp(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
         cardButtons.addView(row, lp())
+        // En la sesión de grupo se guarda solo a los 4 s, salvo que se pulse Repetir o Revisar.
+        if (groupMode) startAutoSave(saveBtn, 4) { doSave() }
     }
 
-    private fun athleteName() = intent.getStringExtra(MainActivity.EX_ATHLETE) ?: "Sin nombre"
+    private fun startAutoSave(b: Button, seconds: Int, action: () -> Unit) {
+        cancelAutoSave()
+        val base = b.text.toString()
+        var left = seconds
+        val r = object : Runnable {
+            override fun run() {
+                if (autoSave !== this) return
+                if (left <= 0) { autoSave = null; action(); return }
+                b.text = "$base ($left)"
+                left--
+                main.postDelayed(this, 1000)
+            }
+        }
+        autoSave = r
+        main.post(r)
+    }
+
+    private fun cancelAutoSave() {
+        autoSave?.let { main.removeCallbacks(it) }
+        autoSave = null
+    }
+
+    private fun topLabel(): String {
+        val c = cfg
+        val s = if (groupMode) GroupSession.get(this) else null
+        val who = s?.label() ?: "${test.label} · ${intent.getStringExtra(MainActivity.EX_ATHLETE) ?: ""}"
+        return (if (s != null) "${test.label} · " else "") + who + "\n${c?.fps} fps · ${c?.size?.width}×${c?.size?.height}" +
+            if (c?.highSpeed == false) "  (sin modo cámara lenta)" else ""
+    }
+
+    /** Tras guardar: siguiente salto del mismo atleta, o siguiente turno en la sesión de grupo. */
+    private fun nextTurn() {
+        if (!groupMode) { restartLive(null); return }
+        val s = GroupSession.advance(this)
+        if (s == null || s.finished) {
+            Voice.say(this, "Sesión terminada. Buen trabajo.")
+            card.visibility = android.view.View.GONE
+            finish()
+            return
+        }
+        topText.text = topLabel()
+        Voice.say(this, GroupSession.announce(s))
+        restartLive(null)
+    }
+
+    override fun onKeyDown(keyCode: Int, event: android.view.KeyEvent): Boolean {
+        if (RemoteKeys.isTrigger(keyCode)) {
+            if (event.repeatCount > 0) return true
+            val p = cardPrimary
+            when {
+                card.visibility == android.view.View.VISIBLE && p != null && p.isEnabled -> p.performClick()
+                card.visibility != android.view.View.VISIBLE && !starting -> onRecordPressed()
+            }
+            return true
+        }
+        return super.onKeyDown(keyCode, event)
+    }
+
+    override fun onKeyUp(keyCode: Int, event: android.view.KeyEvent): Boolean =
+        if (RemoteKeys.isTrigger(keyCode)) true else super.onKeyUp(keyCode, event)
+
+    private fun athleteName() = (if (groupMode) GroupSession.get(this)?.current?.first else null)
+        ?: intent.getStringExtra(MainActivity.EX_ATHLETE) ?: "Sin nombre"
 
     private fun showCard(status: String, big: String, bigColor: Int, detail: String) {
         cardStatus.text = status
@@ -718,10 +865,12 @@ class CaptureActivity : BaseActivity() {
 
     /** Oculta el resultado y vuelve a grabar para el siguiente salto. */
     private fun restartLive(msg: String?) {
+        cancelAutoSave()
+        cardPrimary = null
         card.visibility = android.view.View.GONE
         if (recording) haltRecording()?.delete()
         liveHandled = false
-        msg?.let { Toast.makeText(this, it, Toast.LENGTH_LONG).show() }
+        msg?.let { Tst.makeText(this, it, Toast.LENGTH_LONG).show() }
         info.text = idleHint()
         if (camera != null) startRecording() else startPreview()
     }

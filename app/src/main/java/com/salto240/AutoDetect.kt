@@ -203,7 +203,7 @@ object AutoDetect {
         val minScore = FloatArray(n) { min(dE[it], dS[it]) - motion[it] }
         val dEStable = FloatArray(n) { dE[it] - motion[it] }
         val startCore = startIdx.toIntArray()
-        if (test == TestType.DJ) {
+        if (test.isDrop) {
             candidates.add(startCore to true)
             core(minScore, s0, n - win)?.let { candidates.add(it to false) }
         } else {
@@ -248,7 +248,7 @@ object AutoDetect {
         val diffS = FloatArray(m) { abs(S[it] - A[it]) }
         val tau = max(max(6f, 3.5f * sigma), 0.25f * percentile(diffE, 0.98f))
         val maskE = BooleanArray(m) { diffE[it] > tau }
-        val useS = !aIsStart && test != TestType.DJ
+        val useS = !aIsStart && !test.isDrop
         val maskS = BooleanArray(m) { useS && diffS[it] > tau }
         val nE = maskE.count { it }
         if (nE < max(3, (0.004f * m).roundToInt())) return Result(error = E_CONTRAST) to Float.MAX_VALUE
@@ -267,7 +267,7 @@ object AutoDetect {
         val floor = min(floorE, floorS)
 
         // Columnas donde pueden estar los pies (con margen por si aterriza desplazado).
-        val margin = if (test == TestType.RJ) 8 else 3
+        val margin = if (test.isRepeated) 8 else 3
         val colOk = BooleanArray(cols)
         for (r in max(0, floor - 8)..max(floorE, floorS)) for (col in 0 until cols) {
             val i = r * cols + col
@@ -341,7 +341,7 @@ object AutoDetect {
             }
             return if (cnt == 0) Float.MAX_VALUE else sum / cnt
         }
-        val res = when (test) {
+        val res = when (test.base) {
             TestType.RJ -> {
                 val ev = mutableListOf<Int>()
                 flights.forEach { (_, r) -> ev.add(r.start); ev.add(refineLanding(r.end + 1)) }
@@ -370,7 +370,7 @@ object AutoDetect {
         }
         // Un vuelo sin apoyo previo suficiente (salvo Drop Jump) es sospechoso: se penaliza.
         val pre = res.preContact ?: 0
-        val penalty = if (test != TestType.DJ && pre < 0.25 * fps) 1f else 0f
+        val penalty = if (!test.isDrop && pre < 0.25 * fps) 1f else 0f
         return res to (score + penalty)
     }
 }

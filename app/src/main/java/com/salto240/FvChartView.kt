@@ -31,7 +31,7 @@ class FvChartView(ctx: Context) : View(ctx) {
         val p = profile
         val l = 40 * d; val t = 14 * d; val r = width - 14 * d; val b = height - 34 * d
         if (p == null) {
-            c.drawText("Faltan al menos 2 cargas para trazar el perfil.", l, height / 2f, label)
+            c.drawText(Lang.tr(context, "Faltan al menos 2 cargas para trazar el perfil."), l, height / 2f, label)
             return
         }
         val vMax = ceil(maxOf(p.v0, p.v0Opt) * 1.05 * 2) / 2      // múltiplo de 0,5 m/s
@@ -54,8 +54,9 @@ class FvChartView(ctx: Context) : View(ctx) {
         }
         c.drawLine(l, b, r, b, axis)
         c.drawLine(l, t, l, b, axis)
-        c.drawText("Velocidad (m/s)", r - 92 * d, b + 28 * d, label)
-        c.drawText("Fuerza (N/kg)", l + 6 * d, t + 10 * d, label)
+        val vl = Lang.tr(context, "Velocidad (m/s)")
+        c.drawText(vl, r - label.measureText(vl), b + 28 * d, label)
+        c.drawText(Lang.tr(context, "Fuerza (N/kg)"), l + 6 * d, t + 10 * d, label)
 
         // Recta óptima (misma potencia máxima) y recta real
         c.drawLine(x(0.0), y(p.f0Opt), x(p.v0Opt), y(0.0), opt)

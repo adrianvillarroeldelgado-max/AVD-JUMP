@@ -43,7 +43,7 @@ class TrendChartView(ctx: Context) : View(ctx) {
         super.onDraw(c)
         val l = 44 * d; val t = 22 * d; val r = width - 16 * d; val b = height - 26 * d
         if (points.isEmpty()) {
-            c.drawText("Sin datos de este indicador todavía.", l, height / 2f, label)
+            c.drawText(Lang.tr(context, "Sin datos de este indicador todavía."), l, height / 2f, label)
             return
         }
         val vals = points.map { it.second }

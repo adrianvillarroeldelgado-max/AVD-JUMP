@@ -130,13 +130,13 @@ class ClientEditActivity : BaseActivity() {
     }
 
     private fun spinner(opts: List<String>, value: String?): Spinner = Spinner(this).apply {
-        adapter = ArrayAdapter(this@ClientEditActivity, android.R.layout.simple_spinner_dropdown_item, opts)
+        adapter = TrAdapter(this@ClientEditActivity, android.R.layout.simple_spinner_dropdown_item, opts)
         setSelection(opts.indexOf(value).coerceAtLeast(0))
     }
 
     private fun loadGroups(selectId: Long?) {
         groups = Clients.groups(this)
-        groupSpinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item,
+        groupSpinner.adapter = TrAdapter(this, android.R.layout.simple_spinner_dropdown_item,
             listOf("Sin grupo") + groups.map { it.name })
         val idx = groups.indexOfFirst { it.id == selectId }
         groupSpinner.setSelection(if (idx >= 0) idx + 1 else 0)
@@ -145,12 +145,12 @@ class ClientEditActivity : BaseActivity() {
     private fun newGroup() {
         val e = input("Nombre del grupo (p. ej. Sub-17, Velocistas)")
         val box = vbox().apply { setPadding(dp(20), dp(8), dp(20), 0); addView(e, lp()) }
-        AlertDialog.Builder(this)
+        Dlg(this)
             .setTitle("Nuevo grupo")
             .setView(box)
             .setPositiveButton("Crear") { _, _ ->
                 val id = Clients.addGroup(this, e.text.toString())
-                if (id == null) Toast.makeText(this, "Nombre vacío o repetido.", Toast.LENGTH_SHORT).show()
+                if (id == null) Tst.makeText(this, "Nombre vacío o repetido.", Toast.LENGTH_SHORT).show()
                 else loadGroups(id)
             }
             .setNegativeButton("Cancelar", null)
@@ -200,11 +200,11 @@ class ClientEditActivity : BaseActivity() {
         val c = build(editing?.id ?: System.currentTimeMillis())
         val err = Clients.save(this, c)
         if (err != null) {
-            Toast.makeText(this, err, Toast.LENGTH_LONG).show()
+            Tst.makeText(this, err, Toast.LENGTH_LONG).show()
             return
         }
-        if (c.massKg == null) Toast.makeText(this, "Guardado. Sin peso no se calculan potencia ni perfil F-V.", Toast.LENGTH_LONG).show()
-        else Toast.makeText(this, "Cliente guardado", Toast.LENGTH_SHORT).show()
+        if (c.massKg == null) Tst.makeText(this, "Guardado. Sin peso no se calculan potencia ni perfil F-V.", Toast.LENGTH_LONG).show()
+        else Tst.makeText(this, "Cliente guardado", Toast.LENGTH_SHORT).show()
         // Queda elegido para medir.
         getSharedPreferences("salto240", MODE_PRIVATE).edit().putString("lastAthlete", c.name).apply()
         finish()
@@ -212,7 +212,7 @@ class ClientEditActivity : BaseActivity() {
 
     private fun confirmDelete(c: Client) {
         val n = Store.ofAthlete(this, c.name).size
-        AlertDialog.Builder(this)
+        Dlg(this)
             .setTitle("¿Borrar a ${c.name}?")
             .setMessage(if (n > 0) "Tiene $n saltos guardados." else "No tiene saltos guardados.")
             .setPositiveButton(if (n > 0) "Borrar todo" else "Borrar") { _, _ ->

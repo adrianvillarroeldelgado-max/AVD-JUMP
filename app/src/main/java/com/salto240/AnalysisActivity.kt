@@ -77,10 +77,10 @@ class AnalysisActivity : BaseActivity() {
     @Volatile private var scanCancelled = false
     private val zoomButtons = mutableListOf<Button>()
 
-    private val isRj get() = test == TestType.RJ
+    private val isRj get() = test.isRepeated
 
     private val markDefs: List<Pair<String, String>>
-        get() = when (test) {
+        get() = when (test.base) {
             TestType.DJ -> listOf("contact" to "Contacto", "takeoff" to "Despegue", "landing" to "Aterrizaje")
             TestType.RJ -> emptyList()
             else -> listOf("takeoff" to "Despegue", "landing" to "Aterrizaje")
@@ -102,11 +102,11 @@ class AnalysisActivity : BaseActivity() {
         val uri = Uri.parse(intent.getStringExtra(MainActivity.EX_URI) ?: run { finish(); return })
 
         val s = try { FrameSource(this, uri) } catch (e: Exception) {
-            Toast.makeText(this, "No se pudo abrir el video: ${e.message}", Toast.LENGTH_LONG).show()
+            Tst.makeText(this, "No se pudo abrir el video: ${e.message}", Toast.LENGTH_LONG).show()
             finish(); return
         }
         if (s.frameCount <= 1) {
-            Toast.makeText(this, "El video no indica su número de cuadros. Prueba con otro archivo.", Toast.LENGTH_LONG).show()
+            Tst.makeText(this, "El video no indica su número de cuadros. Prueba con otro archivo.", Toast.LENGTH_LONG).show()
             s.release(); finish(); return
         }
         src = s
@@ -138,7 +138,7 @@ class AnalysisActivity : BaseActivity() {
         val c = intent.getIntExtra(EX_PRESET_CONTACT, -1).takeIf { it >= 0 }
         if (ev.isEmpty() && (to == null || ld == null)) return null
         return AutoDetect.Result(takeoff = to, landing = ld, contact = c, events = ev,
-            error = if (test == TestType.DJ && c == null && ev.isEmpty()) "No se detectó el contacto inicial tras la caída; márcalo a mano." else null)
+            error = if (test.isDrop && c == null && ev.isEmpty()) "No se detectó el contacto inicial tras la caída; márcalo a mano." else null)
     }
 
     /** Si el archivo ya trae muchos cuadros por segundo, ese es el fps de captura; si no, se asume cámara lenta exportada. */
@@ -261,7 +261,7 @@ class AnalysisActivity : BaseActivity() {
             val mark = button("", true) {
                 val last = events.lastOrNull()
                 if (last != null && frame <= last) {
-                    Toast.makeText(this, "Avanza el video: cada marca debe ir después de la anterior.", Toast.LENGTH_SHORT).show()
+                    Tst.makeText(this, "Avanza el video: cada marca debe ir después de la anterior.", Toast.LENGTH_SHORT).show()
                 } else {
                     events.add(frame); refreshMarks(); compute()
                 }
@@ -352,7 +352,7 @@ class AnalysisActivity : BaseActivity() {
         val labels = opts.map { "$it fps" }.toTypedArray()
         val sel = opts.indexOf(capFps).coerceAtLeast(0)
         val msg = if (fileFps > 0) String.format(Locale.getDefault(), "Archivo: %.0f cuadros/s. ", fileFps) else ""
-        AlertDialog.Builder(this)
+        Dlg(this)
             .setTitle(msg + "¿A cuántos fps se grabó?")
             .setSingleChoiceItems(labels, sel) { d, which ->
                 capFps = opts[which]
@@ -379,7 +379,7 @@ class AnalysisActivity : BaseActivity() {
 
         val need = markDefs.map { it.first }
         if (!need.all { marks.containsKey(it) }) {
-            fail(if (test == TestType.DJ) "Marca contacto inicial, despegue y aterrizaje." else "Marca el despegue y el aterrizaje.")
+            fail(if (test.isDrop) "Marca contacto inicial, despegue y aterrizaje." else "Marca el despegue y el aterrizaje.")
             return
         }
         val takeoff = marks["takeoff"]!!
@@ -394,7 +394,7 @@ class AnalysisActivity : BaseActivity() {
 
         var tcMs: Double? = null
         var rsi: Double? = null
-        if (test == TestType.DJ) {
+        if (test.isDrop) {
             val contactFrames = takeoff - marks["contact"]!!
             if (contactFrames <= 0) { fail("El despegue debe estar después del contacto inicial."); return }
             val tc = contactFrames.toDouble() / capFps
@@ -439,7 +439,7 @@ class AnalysisActivity : BaseActivity() {
             heightCm = (h * 10).roundToInt() / 10.0,
             contactMs = tcMs,
             rsi = rsi,
-            boxCm = if (test == TestType.DJ) box else null,
+            boxCm = if (test.isDrop) box else null,
             massKg = mass,
             powerW = power,
             fps = capFps,
@@ -487,6 +487,8 @@ class AnalysisActivity : BaseActivity() {
         if (contacts.isNotEmpty()) {
             sb.append(stat("Contacto medio", fmt("%.0f ms", contacts.average())))
             sb.append(stat("RSI medio", fmt("%.2f", rsis.average())))
+            if (test == TestType.RJ105 && rsis.size >= 5)
+                sb.append(stat("RSI 10/5", fmt("%.2f (media de los 5 mejores)", rsis.sortedDescending().take(5).average())))
         }
         fatigue?.let { sb.append(stat("Caída de altura", fmt("%.1f %% (3 primeros vs 3 últimos)", it))) }
         val totalS = (events.last() - events.first()).toDouble() / capFps
@@ -503,7 +505,11 @@ class AnalysisActivity : BaseActivity() {
             flightMs = flights.average(),
             heightCm = (meanH * 10).roundToInt() / 10.0,
             contactMs = if (contacts.isEmpty()) null else contacts.average(),
-            rsi = if (rsis.isEmpty()) null else rsis.average(),
+            rsi = when {
+                rsis.isEmpty() -> null
+                test == TestType.RJ105 -> rsis.sortedDescending().take(5).average()
+                else -> rsis.average()
+            },
             boxCm = null,
             massKg = mass,
             powerW = null,
@@ -522,7 +528,7 @@ class AnalysisActivity : BaseActivity() {
     /** Cuadros marcados, en el orden que guarda Jump.marks. */
     private fun currentMarks(): List<Int> = when {
         isRj -> events.toList()
-        test == TestType.DJ -> listOfNotNull(marks["contact"], marks["takeoff"], marks["landing"]).takeIf { it.size == 3 } ?: emptyList()
+        test.isDrop -> listOfNotNull(marks["contact"], marks["takeoff"], marks["landing"]).takeIf { it.size == 3 } ?: emptyList()
         else -> listOfNotNull(marks["takeoff"], marks["landing"]).takeIf { it.size == 2 } ?: emptyList()
     }
 
@@ -538,7 +544,7 @@ class AnalysisActivity : BaseActivity() {
                     video = old.video, marks = currentMarks())
                 Store.update(this, upd)
                 saveBtn.isEnabled = false
-                AlertDialog.Builder(this)
+                Dlg(this)
                     .setTitle(fmt("Medición actualizada: %.1f cm", upd.heightCm))
                     .setMessage(fmt("Antes: %.1f cm (%.0f ms de vuelo)\nAhora: %.1f cm (%.0f ms de vuelo)",
                         old.heightCm, old.flightMs, upd.heightCm, upd.flightMs))
@@ -554,7 +560,8 @@ class AnalysisActivity : BaseActivity() {
         if (battery) { batterySaved(saved); return }
         var msg = "${saved.test.label} de ${saved.athlete}"
         asymmetryNote(saved)?.let { msg += "\n\n$it" }
-        val b = AlertDialog.Builder(this)
+        Attempts.afterSave(this, saved)?.let { msg += "\n\n$it" }
+        val b = Dlg(this)
             .setTitle(fmt("Guardado: %.1f cm", saved.heightCm))
             .setMessage(msg)
             .setNeutralButton("Historial") { _, _ ->
@@ -574,7 +581,7 @@ class AnalysisActivity : BaseActivity() {
     private fun batterySaved(saved: Jump) {
         val next = BatteryActivity.nextPending(this, athlete)
         val loadTxt = fmt("%.1f kg", saved.loadKg ?: 0.0)
-        val b = AlertDialog.Builder(this)
+        val b = Dlg(this)
             .setTitle(fmt("Carga %s: %.1f cm", loadTxt, saved.heightCm))
             .setNegativeButton("Volver a la batería") { _, _ -> finish() }
             .setNeutralButton("Repetir esta carga") { _, _ ->
@@ -637,7 +644,7 @@ class AnalysisActivity : BaseActivity() {
         val x1 = (u + halfWidth).coerceAtMost(1f)
         scanCancelled = false
         val status = text("Analizando 0 %", 15f, Col.INK).apply { setPadding(dp(24), dp(16), dp(24), dp(8)) }
-        val dlg = AlertDialog.Builder(this)
+        val dlg = Dlg(this)
             .setTitle("Detección automática")
             .setView(status)
             .setNegativeButton("Cancelar") { _, _ -> scanCancelled = true }
@@ -664,7 +671,7 @@ class AnalysisActivity : BaseActivity() {
         } else if (r.takeoff != null && r.landing != null) {
             marks["takeoff"] = r.takeoff
             marks["landing"] = r.landing
-            if (test == TestType.DJ) {
+            if (test.isDrop) {
                 if (r.contact != null) marks["contact"] = r.contact else marks.remove("contact")
             }
             placed = true
@@ -673,9 +680,9 @@ class AnalysisActivity : BaseActivity() {
         if (placed) {
             show(if (isRj) events.first() else r.takeoff ?: 0)
             val extra = r.error?.let { "\n$it" } ?: ""
-            Toast.makeText(this, "Marcas automáticas listas. Revisa con ±1 y corrige si hace falta.$extra", Toast.LENGTH_LONG).show()
+            Tst.makeText(this, "Marcas automáticas listas. Revisa con ±1 y corrige si hace falta.$extra", Toast.LENGTH_LONG).show()
         } else {
-            AlertDialog.Builder(this)
+            Dlg(this)
                 .setTitle("No se pudo detectar")
                 .setMessage((r.error ?: "Sin resultado.") + "\n\nPuedes pulsar Auto y tocar otra zona del suelo, o marcar a mano.")
                 .setPositiveButton("Aceptar", null)

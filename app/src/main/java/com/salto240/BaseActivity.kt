@@ -20,6 +20,14 @@ open class BaseActivity : Activity() {
     override fun setContentView(view: View) {
         super.setContentView(view)
         fitSystemBars(view)
+        // Inglés o portugués: los textos se traducen al dibujarse (solo los que cambiaron).
+        if (!Lang.spanish(this)) {
+            Lang.translateTree(this, view)
+            view.viewTreeObserver.addOnPreDrawListener {
+                try { Lang.translateTree(this, window.decorView) } catch (_: Exception) {}
+                true
+            }
+        }
     }
 
     @Suppress("DEPRECATION")

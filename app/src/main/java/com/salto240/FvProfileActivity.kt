@@ -70,7 +70,7 @@ class FvProfileActivity : BaseActivity() {
         val pS = panel()
         pS.addView(caption("Protocolo"))
         val protoSpinner = Spinner(this).apply {
-            adapter = ArrayAdapter(this@FvProfileActivity, android.R.layout.simple_spinner_dropdown_item,
+            adapter = TrAdapter(this@FvProfileActivity, android.R.layout.simple_spinner_dropdown_item,
                 listOf("Squat jump con carga", "CMJ con carga"))
             setSelection(Analytics.FV_TESTS.indexOf(protocol))
         }
@@ -140,13 +140,13 @@ class FvProfileActivity : BaseActivity() {
 
     private fun saveAthlete() {
         Store.saveAthlete(this, currentAthlete())
-        Toast.makeText(this, "Medidas guardadas", Toast.LENGTH_SHORT).show()
+        Tst.makeText(this, "Medidas guardadas", Toast.LENGTH_SHORT).show()
     }
 
     private fun reload() {
         val prevDay = daySpinner.selectedItem as? String
         days = Analytics.fvDays(Store.all(this), athleteName(), protocol)
-        daySpinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item,
+        daySpinner.adapter = TrAdapter(this, android.R.layout.simple_spinner_dropdown_item,
             if (days.isEmpty()) listOf("Sin saltos ${protocol.short} con carga todavía") else days)
         val idx = days.indexOf(prevDay)
         if (idx >= 0) daySpinner.setSelection(idx)
@@ -225,7 +225,7 @@ class FvProfileActivity : BaseActivity() {
         val fields = hints.mapIndexed { i, h ->
             input(h, true).apply { setText(defaults.getOrElse(i) { "" }) }.also { box.addView(it, lp()) }
         }
-        AlertDialog.Builder(this)
+        Dlg(this)
             .setTitle(title)
             .setView(box)
             .setPositiveButton("Aceptar") { _, _ -> onOk(fields.map { it.number() }) }
@@ -255,7 +255,7 @@ class FvProfileActivity : BaseActivity() {
             val load = v[0] ?: 0.0
             val h = v[1]
             if (h == null || h <= 0) {
-                Toast.makeText(this, "Escribe la altura del salto.", Toast.LENGTH_SHORT).show()
+                Tst.makeText(this, "Escribe la altura del salto.", Toast.LENGTH_SHORT).show()
                 return@numberDialog
             }
             val tv = Math.sqrt(8 * h / 100 / Calc.G)

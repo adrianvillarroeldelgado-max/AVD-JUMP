@@ -48,12 +48,15 @@ class ReportActivity : BaseActivity() {
                 startActivity(Intent(this, ClientHistoryActivity::class.java).putExtra(MainActivity.EX_ATHLETE, n))
             }
         }, lp())
-        root.addView(button("Compartir informe", true) { share() }, lp())
+        root.addView(button("Informe en PDF con logo", true) {
+            names.getOrNull(spinner.selectedItemPosition)?.let { PdfShare.run(this, it) }
+        }, lp())
+        root.addView(button("Compartir como texto") { share() }, lp())
 
         setContentView(ScrollView(this).apply { setBackgroundColor(Col.BG); addView(root) })
 
         names = Store.athletes(this)
-        spinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item,
+        spinner.adapter = TrAdapter(this, android.R.layout.simple_spinner_dropdown_item,
             if (names.isEmpty()) listOf("Sin atletas") else names)
         val idx = names.indexOf(intent.getStringExtra(MainActivity.EX_ATHLETE))
         if (idx >= 0) spinner.setSelection(idx)
@@ -88,6 +91,10 @@ class ReportActivity : BaseActivity() {
         sb.append(fmt("%-20s %s\n", "Drop Jump (RSI)", dj?.let { fmt("%.2f · %.1f cm · %.0f ms", it.rsi, it.heightCm, it.contactMs) } ?: "—"))
         val asy = Analytics.asymmetry(js)
         sb.append(fmt("%-20s %s\n", "Asimetría", asy?.let { fmt("%.1f %% (I %.1f · D %.1f)", it.third, it.first, it.second) } ?: "—"))
+        val asyR = Analytics.reactiveAsymmetry(js)
+        if (asyR != null) sb.append(fmt("%-20s %.1f %% (I %.2f · D %.2f)\n", "Asimetría reactiva", asyR.third, asyR.first, asyR.second))
+        Analytics.latestRsi(js, TestType.RJ105)?.let { sb.append(fmt("%-20s RSI %.2f\n", "Test 10/5", it.rsi)) }
+        Analytics.latestRsi(js, TestType.POGO)?.let { sb.append(fmt("%-20s RSI %.2f · %.0f ms\n", "Pogo", it.rsi, it.contactMs ?: 0.0)) }
         val rj = js.filter { it.test == TestType.RJ }.maxByOrNull { it.date }
         sb.append(fmt("%-20s %s\n", "Saltos repetidos", rj?.let {
             fmt("%d saltos · %.1f cm · RSI %s", it.reps.size, it.heightCm, it.rsi?.let { r -> fmt("%.2f", r) } ?: "—")
@@ -115,7 +122,7 @@ class ReportActivity : BaseActivity() {
         val i = Intent(Intent.ACTION_SEND).apply {
             type = "text/plain"
             putExtra(Intent.EXTRA_SUBJECT, "Informe AVD jump")
-            putExtra(Intent.EXTRA_TEXT, lastReport)
+            putExtra(Intent.EXTRA_TEXT, Lang.tr(this@ReportActivity, lastReport))
         }
         startActivity(Intent.createChooser(i, "Compartir informe"))
     }

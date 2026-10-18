@@ -54,7 +54,7 @@ class PoseJumpDetector(private val test: TestType, statureCm: Double?, private v
     val floorPx: Double? get() = floor
     val scale: Double? get() = pxPerCm
 
-    private val settleS = if (test == TestType.RJ) 1.2 else 0.4
+    private val settleS = if (test.isRepeated) 1.2 else 0.4
     private val minQuietS = 0.3
     private val g = Calc.G
 
@@ -231,7 +231,7 @@ class PoseJumpDetector(private val test: TestType, statureCm: Double?, private v
             return Rep(tv, h, contactS, to, ld)
         }
 
-        return when (test) {
+        return when (test.base) {
             TestType.RJ -> {
                 val reps = ArrayList<Rep>()
                 var prevLanding: Double? = null

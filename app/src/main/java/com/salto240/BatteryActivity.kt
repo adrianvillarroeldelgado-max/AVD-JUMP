@@ -281,7 +281,7 @@ class BatteryActivity : BaseActivity() {
         if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
             startActivity(captureIntent(this, name, i))
         } else {
-            Toast.makeText(this, "Sin permiso de cámara: usa Video de la galería.", Toast.LENGTH_LONG).show()
+            Tst.makeText(this, "Sin permiso de cámara: usa Video de la galería.", Toast.LENGTH_LONG).show()
         }
     }
 

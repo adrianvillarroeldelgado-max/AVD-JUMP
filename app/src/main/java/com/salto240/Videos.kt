@@ -144,8 +144,8 @@ object Videos {
             putExtra(AnalysisActivity.EX_EDIT_ID, j.id)
             val mk = j.marks
             when {
-                j.test == TestType.RJ && mk.size >= 2 -> putExtra(AnalysisActivity.EX_PRESET_EVENTS, mk.toIntArray())
-                j.test == TestType.DJ && mk.size == 3 -> {
+                j.test.isRepeated && mk.size >= 2 -> putExtra(AnalysisActivity.EX_PRESET_EVENTS, mk.toIntArray())
+                j.test.isDrop && mk.size == 3 -> {
                     putExtra(AnalysisActivity.EX_PRESET_CONTACT, mk[0])
                     putExtra(AnalysisActivity.EX_PRESET_TAKEOFF, mk[1])
                     putExtra(AnalysisActivity.EX_PRESET_LANDING, mk[2])

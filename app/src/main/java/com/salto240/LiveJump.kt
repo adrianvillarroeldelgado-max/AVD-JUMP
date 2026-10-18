@@ -40,9 +40,9 @@ class LiveDetector(private val test: TestType) {
     }
 
     /** Tiempo tras el último aterrizaje antes de dar el salto por terminado. */
-    private val settleS = if (test == TestType.RJ) 1.2 else 0.45
+    private val settleS = if (test.isRepeated) 1.2 else 0.45
     /** Se conservan los últimos segundos de vista previa (el salto y el apoyo previo caben de sobra). */
-    private val keepS = if (test == TestType.RJ) 14.0 else 6.0
+    private val keepS = if (test.isRepeated) 14.0 else 6.0
 
     /**
      * Agrega un cuadro de la vista previa (llamar siempre desde el mismo hilo, no el principal).
@@ -64,12 +64,12 @@ class LiveDetector(private val test: TestType) {
         val now = (tNs - originNs) / 1e9
         // El atleta debe estar quieto sobre el suelo antes de despegar (descarta a alguien que entra caminando).
         // En el Drop Jump el apoyo previo es el contacto corto tras la caída, así que no se exige.
-        if (test != TestType.DJ) {
+        if (!test.isDrop) {
             val pre = r.preContact ?: return null
             if (pre / fps < 0.25) return null
         }
 
-        return if (test == TestType.RJ) {
+        return if (test.isRepeated) {
             val ev = r.events
             if (ev.size < 2 || ev.size % 2 != 0) return null
             if (sec(ev.last()) > now - settleS) return null
@@ -79,7 +79,7 @@ class LiveDetector(private val test: TestType) {
             val ld = r.landing ?: return null
             if (sec(ld) > now - settleS) return null
             if (sec(ld) - sec(to) > 1.0) return null   // más de 1 s "en el aire": salió del encuadre, no es un salto
-            if (test == TestType.DJ && r.contact == null) return null
+            if (test.isDrop && r.contact == null) return null
             Live(sec(to), sec(ld), r.contact?.let { sec(it) }, emptyList(), fps)
         }
     }
@@ -88,11 +88,11 @@ class LiveDetector(private val test: TestType) {
         /** Tramo del video de alta velocidad (en cuadros) que contiene el salto, con margen. */
         fun window(l: Live, test: TestType, fps: Int, frameCount: Int): IntRange {
             val startS = when {
-                test == TestType.RJ -> (l.eventsS.firstOrNull() ?: l.takeoffS ?: 0.0) - 1.0
-                test == TestType.DJ -> (l.contactS ?: l.takeoffS ?: 0.0) - 1.0
+                test.isRepeated -> (l.eventsS.firstOrNull() ?: l.takeoffS ?: 0.0) - 1.0
+                test.isDrop -> (l.contactS ?: l.takeoffS ?: 0.0) - 1.0
                 else -> (l.takeoffS ?: 0.0) - 1.0
             }
-            val endS = (l.eventsS.lastOrNull()?.takeIf { test == TestType.RJ } ?: l.landingS ?: 0.0) + 0.45
+            val endS = (l.eventsS.lastOrNull()?.takeIf { test.isRepeated } ?: l.landingS ?: 0.0) + 0.45
             val a = (startS * fps).roundToInt().coerceIn(0, (frameCount - 1).coerceAtLeast(0))
             val b = (endS * fps).roundToInt().coerceIn(a, (frameCount - 1).coerceAtLeast(a))
             return a..b
@@ -143,7 +143,7 @@ object JumpCalc {
         val flightFrames = landing - takeoff
         if (flightFrames <= 0) return null
         var tc: Double? = null
-        if (test == TestType.DJ) {
+        if (test.isDrop) {
             val c = contact ?: return null
             tc = (takeoff - c).toDouble() / fps
             if (tc <= 0) return null
@@ -163,7 +163,7 @@ object JumpCalc {
         sb.append(f("Vuelo %.0f ms · despegue %.2f m/s\n", tv * 1000, Calc.takeoffVelocity(tv)))
         var tcMs: Double? = null
         var rsi: Double? = null
-        if (test == TestType.DJ) {
+        if (test.isDrop) {
             val c = tc ?: return null
             if (c <= 0) return null
             tcMs = c * 1000
@@ -183,7 +183,7 @@ object JumpCalc {
             heightCm = (h * 10).roundToInt() / 10.0,
             contactMs = tcMs,
             rsi = rsi,
-            boxCm = if (test == TestType.DJ) box else null,
+            boxCm = if (test.isDrop) box else null,
             massKg = mass,
             powerW = power,
             fps = fps,
@@ -194,20 +194,27 @@ object JumpCalc {
     }
 
     /** Serie de saltos repetidos a partir de los vuelos y contactos (s). */
-    fun repeated(athlete: String, flights: List<Double>, contacts: List<Double>, mass: Double?, fps: Int): Jump? {
+    fun repeated(athlete: String, flights: List<Double>, contacts: List<Double>, mass: Double?, fps: Int,
+                 test: TestType = TestType.RJ): Jump? {
         if (flights.isEmpty()) return null
         val heights = flights.map { Calc.heightCm(it) }
         val rsis = heights.drop(1).zip(contacts).map { (h, c) -> Calc.rsi(h, c) }
         val meanH = heights.average()
+        // Test 10/5: RSI = media de los 5 mejores saltos (Harper et al.); resto: media de la serie.
+        val rsi = when {
+            rsis.isEmpty() -> null
+            test == TestType.RJ105 -> rsis.sortedDescending().take(5).average()
+            else -> rsis.average()
+        }
         return Jump(
             id = System.currentTimeMillis(),
             date = Store.today(),
             athlete = athlete,
-            test = TestType.RJ,
+            test = test,
             flightMs = flights.average() * 1000,
             heightCm = (meanH * 10).roundToInt() / 10.0,
             contactMs = if (contacts.isEmpty()) null else contacts.average() * 1000,
-            rsi = if (rsis.isEmpty()) null else rsis.average(),
+            rsi = rsi,
             boxCm = null,
             massKg = mass,
             powerW = null,
@@ -224,20 +231,26 @@ object JumpCalc {
         val other = when (saved.test) {
             TestType.CMJ_L -> TestType.CMJ_R
             TestType.CMJ_R -> TestType.CMJ_L
+            TestType.DJ_L -> TestType.DJ_R
+            TestType.DJ_R -> TestType.DJ_L
             else -> return null
         }
+        val reactive = saved.test.isDrop
+        fun value(j: Jump): Double? = if (reactive) j.rsi else j.heightCm
         val today = Store.ofAthlete(ctx, saved.athlete).filter { it.day == saved.day }
-        val best = today.filter { it.test == saved.test }.maxOfOrNull { it.heightCm } ?: return null
-        val otherBest = today.filter { it.test == other }.maxOfOrNull { it.heightCm }
-            ?: return "Ahora mide la pierna ${if (other == TestType.CMJ_L) "izquierda" else "derecha"} para calcular la asimetría."
-        val l = if (saved.test == TestType.CMJ_L) best else otherBest
-        val r = if (saved.test == TestType.CMJ_R) best else otherBest
+        val best = today.filter { it.test == saved.test }.mapNotNull { value(it) }.maxOrNull() ?: return null
+        val isLeft = saved.test == TestType.CMJ_L || saved.test == TestType.DJ_L
+        val otherBest = today.filter { it.test == other }.mapNotNull { value(it) }.maxOrNull()
+            ?: return "Ahora mide la pierna ${if (isLeft) "derecha" else "izquierda"} para calcular la asimetría."
+        val l = if (isLeft) best else otherBest
+        val r = if (isLeft) otherBest else best
         val pct = Calc.asymmetry(l, r)
         val verdict = when {
             pct >= 15 -> "alta: conviene trabajo unilateral"
             pct >= 10 -> "moderada: vigilar"
             else -> "dentro de lo normal"
         }
-        return f("Asimetría de hoy: %.1f %% (%s)\nIzquierda %.1f cm · derecha %.1f cm", pct, verdict, l, r)
+        return if (reactive) f("Asimetría reactiva de hoy (RSI): %.1f %% (%s)\nIzquierda %.2f · derecha %.2f", pct, verdict, l, r)
+        else f("Asimetría de hoy: %.1f %% (%s)\nIzquierda %.1f cm · derecha %.1f cm", pct, verdict, l, r)
     }
 }
