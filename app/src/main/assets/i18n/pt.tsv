@@ -853,3 +853,15 @@ re:\b(\d+) intentos\b	$1 tentativas
 re:\b1 intento\b	1 tentativa
 re:intentos? con aviso de técnica\.	com aviso de técnica.
 re:\bmejor (\d)	melhor $1
+Prepárate	Prepare-se
+¡Salta!	Salte!
+¡SALTA!	SALTE!
+⏱ Sin temporizador	⏱ Sem temporizador
+re:^Temporizador de (\d+) s: 	Temporizador de $1 s: 
+pulsa Grabar, escucha la cuenta atrás y salta al oír «¡Salta!». La app mide sola el salto que sigue a la señal y dice la altura.	toque em Gravar, ouça a contagem regressiva e salte ao ouvir «Salte!». O app mede sozinho o salto que segue o sinal e diz a altura.
+Prepárate: salta al oír «¡Salta!»	Prepare-se: salte ao ouvir «Salte!»
+· prepárate	· prepare-se
+· ¡salta!	· salte!
+Midiendo el salto…	Medindo o salto…
+Midiendo a	Medindo a
+fps el salto tras la señal…	fps o salto após o sinal…

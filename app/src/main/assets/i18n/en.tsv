@@ -940,3 +940,15 @@ re:\b(\d+) intentos\b	$1 attempts
 re:\b1 intento\b	1 attempt
 re:intentos? con aviso de técnica\.	with a technique warning.
 re:\bmejor (\d)	best $1
+Prepárate	Get ready
+¡Salta!	Jump!
+¡SALTA!	JUMP!
+⏱ Sin temporizador	⏱ No timer
+re:^Temporizador de (\d+) s: 	Timer $1 s: 
+pulsa Grabar, escucha la cuenta atrás y salta al oír «¡Salta!». La app mide sola el salto que sigue a la señal y dice la altura.	press Record, listen to the countdown and jump when you hear «Jump!». The app measures the jump that follows the signal and says the height.
+Prepárate: salta al oír «¡Salta!»	Get ready: jump when you hear «Jump!»
+· prepárate	· get ready
+· ¡salta!	· jump!
+Midiendo el salto…	Measuring the jump…
+Midiendo a	Measuring at
+fps el salto tras la señal…	fps the jump after the signal…

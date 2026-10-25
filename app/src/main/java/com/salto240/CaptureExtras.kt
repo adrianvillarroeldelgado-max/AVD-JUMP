@@ -39,8 +39,8 @@ object Voice {
         if (!on) stop()
     }
 
-    fun init(ctx: Context) {
-        if (!enabled(ctx)) return
+    fun init(ctx: Context, force: Boolean = false) {
+        if (!force && !enabled(ctx)) return
         val loc = Lang.locale(ctx)
         if (tts != null && lang == loc) return
         shutdown()
@@ -52,17 +52,18 @@ object Voice {
                 val t = tts ?: return@TextToSpeech
                 if (t.setLanguage(loc) < 0) t.setLanguage(Locale("es"))
                 t.setSpeechRate(1.05f)
-                pending?.let { say(app, it) }
+                pending?.let { say(app, it, force = true) }
                 pending = null
             }
         }
     }
 
     /** Dice el texto (corta lo que estuviera diciendo). */
-    fun say(ctx: Context, text: String) {
-        if (!enabled(ctx)) return
+    fun say(ctx: Context, text: String, force: Boolean = false) {
+        if (!force && !enabled(ctx)) return
+        if (text.isBlank()) return
         val t = tts
-        if (t == null) { pending = text; init(ctx); return }
+        if (t == null) { pending = text; init(ctx, force); return }
         if (!ready) { pending = text; return }
         t.speak(Lang.tr(ctx, text), TextToSpeech.QUEUE_FLUSH, null, "avd" + System.nanoTime())
     }

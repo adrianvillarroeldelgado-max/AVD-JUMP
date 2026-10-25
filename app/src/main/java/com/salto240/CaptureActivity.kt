@@ -10,7 +10,9 @@ import android.hardware.camera2.CameraConstrainedHighSpeedCaptureSession
 import android.hardware.camera2.CameraDevice
 import android.hardware.camera2.CameraManager
 import android.hardware.camera2.CaptureRequest
+import android.media.AudioManager
 import android.media.MediaRecorder
+import android.media.ToneGenerator
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -93,9 +95,21 @@ class CaptureActivity : BaseActivity() {
     private var cardPrimary: Button? = null
     private var autoSave: Runnable? = null
 
+    // --- Temporizador: cuenta atrás hablada, «¡Salta!» y análisis del tramo posterior ---
+    /** Segundos de cuenta atrás (0 = sin temporizador). */
+    private var timerS = 0
+    private lateinit var timerBtn: Button
+    private lateinit var countText: TextView
+    private var countdown: Runnable? = null
+    /** Momento de la señal «¡Salta!» (elapsedRealtime), 0 si no hay. */
+    private var goAtMs = 0L
+    private var tone: ToneGenerator? = null
+    private val timerEnd = Runnable { finishTimer() }
+
     companion object {
         /** Posición vertical de la línea del suelo en la imagen (0 arriba, 1 abajo). */
         const val EX_FLOOR_V = "floorV"
+        private val TIMER_OPTIONS = listOf(0, 3, 5, 10)
     }
 
     private fun placeGuide() {
@@ -115,9 +129,17 @@ class CaptureActivity : BaseActivity() {
             val s = (SystemClock.elapsedRealtime() - startMs) / 1000.0
             info.text = if (live) String.format(Locale.getDefault(), "● En vivo  %.1f s · esperando el salto", s)
                 else String.format(Locale.getDefault(), "● Grabando  %.1f s", s)
+            if (timerS > 0) {
+                info.text = when {
+                    countdown != null -> String.format(Locale.getDefault(), "● Grabando  %.1f s · prepárate", s)
+                    goAtMs != 0L -> String.format(Locale.getDefault(), "● Grabando  %.1f s · ¡salta!", s)
+                    else -> String.format(Locale.getDefault(), "● Grabando  %.1f s", s)
+                }
+            }
             // Límite de seguridad: los videos de alta velocidad ocupan mucho.
-            if (s >= 15.0) {
-                if (live) restartLive("No se detectó ningún salto en 15 s. Se reinició la grabación.")
+            if (s >= (if (timerS > 0) 6.0 + postJumpS() else 15.0)) {
+                if (timerS > 0) finishTimer()
+                else if (live) restartLive("No se detectó ningún salto en 15 s. Se reinició la grabación.")
                 else stopRecording(true)
             } else main.postDelayed(this, 100)
         }
@@ -146,6 +168,7 @@ class CaptureActivity : BaseActivity() {
         groupMode = intent.getBooleanExtra(GroupSession.EX_SESSION, false) && GroupSession.get(this)?.finished == false
         detector = LiveDetector(test)
         live = groupMode || prefs.getBoolean("liveMode", true)
+        timerS = prefs.getInt("timerS", 0).takeIf { it in TIMER_OPTIONS } ?: 0
         rootFrame = root
         val top = text(topLabel(), 14f, 0xFFFFFFFF.toInt(), true).apply {
             setBackgroundColor(0x99000000.toInt())
@@ -171,8 +194,8 @@ class CaptureActivity : BaseActivity() {
             FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply {
             topMargin = dp(84)
         })
-        Voice.init(this)
-        if (groupMode) GroupSession.get(this)?.let { Voice.say(this, GroupSession.announce(it)) }
+        Voice.init(this, force = timerS > 0)
+        if (groupMode) GroupSession.get(this)?.let { speak(GroupSession.announce(it)) }
 
         // Línea del suelo (arrastrable): la detección automática analiza la franja justo encima.
         guideFrac = getSharedPreferences("salto240", MODE_PRIVATE).getFloat("guideFrac", 0.72f)
@@ -210,14 +233,25 @@ class CaptureActivity : BaseActivity() {
         info = text(idleHint(), 14f, 0xFFFFFFFF.toInt())
         recBtn = button("Grabar", true) { onRecordPressed() }
         liveBtn = button(liveLabel()) { toggleLive() }
+        timerBtn = button(timerLabel()) { cycleTimer() }
         val row = hbox(8)
-        row.addView(recBtn, lp(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-        row.addView(liveBtn, lp(LinearLayout.LayoutParams.WRAP_CONTENT))
+        row.addView(liveBtn, lp(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        row.addView(timerBtn, lp(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
         row.addView(button("IA") { switchToAi() }, lp(LinearLayout.LayoutParams.WRAP_CONTENT))
         bottom.addView(info)
+        bottom.addView(recBtn, lp())
         bottom.addView(row, lp())
         root.addView(bottom, FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM))
+
+        // Número grande de la cuenta atrás
+        countText = text("", 150f, 0xFFFFFFFF.toInt(), true).apply {
+            gravity = Gravity.CENTER
+            setShadowLayer(18f, 0f, 0f, 0xFF000000.toInt())
+            visibility = android.view.View.GONE
+        }
+        root.addView(countText, FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER))
 
         // Tarjeta del resultado en vivo
         card = vbox(10).apply {
@@ -270,6 +304,7 @@ class CaptureActivity : BaseActivity() {
 
     override fun onPause() {
         level.stop()
+        stopTimer()
         cancelAutoSave()
         if (recording) stopRecording(false)
         if (starting && ::recBtn.isInitialized) { starting = false; recBtn.isEnabled = true }
@@ -292,7 +327,8 @@ class CaptureActivity : BaseActivity() {
                     main.post { startPreview() }
                     // Sesión de grupo: la grabación en vivo arranca sola.
                     if (groupMode) main.postDelayed({
-                        if (groupMode && camera != null && !recording && !starting && card.visibility != android.view.View.VISIBLE) startRecording()
+                        if (groupMode && camera != null && !recording && !starting && countdown == null &&
+                            card.visibility != android.view.View.VISIBLE) { if (timerS > 0) startTimer() else startRecording() }
                     }, 1500)
                 }
                 override fun onDisconnected(device: CameraDevice) {
@@ -348,9 +384,16 @@ class CaptureActivity : BaseActivity() {
     }
 
     private fun onRecordPressed() {
-        if (starting) return
+        if (starting && timerS == 0) return
         card.visibility = android.view.View.GONE
-        if (recording) stopRecording(true) else startRecording()
+        when {
+            timerS > 0 && countdown != null -> cancelTimer()
+            timerS > 0 && goAtMs != 0L -> finishTimer()
+            timerS > 0 && !recording && !starting -> startTimer()
+            starting -> {}
+            recording -> stopRecording(true)
+            else -> startRecording()
+        }
     }
 
     @Suppress("DEPRECATION")
@@ -424,15 +467,25 @@ class CaptureActivity : BaseActivity() {
                     recRequest = b
                     main.postDelayed({ lockExposure(s, b) }, 600)
                     main.post {
+                        // Temporizador cancelado mientras la cámara se preparaba: se descarta esta grabación.
+                        if (timerS > 0 && countdown == null && goAtMs == 0L) {
+                            recording = true; starting = false
+                            haltRecording()?.delete()
+                            recBtn.isEnabled = true
+                            info.text = idleHint()
+                            startPreview()
+                            return@post
+                        }
                         liveGen++
                         liveExec.execute { detector.reset() }
                         lastPreviewTs = 0L
                         liveHandled = false
                         recording = true; starting = false
                         startMs = SystemClock.elapsedRealtime()
-                        recBtn.text = "Detener"
+                        recBtn.text = if (countdown != null) "Cancelar" else "Detener"
                         recBtn.isEnabled = true
                         liveBtn.isEnabled = false
+                        timerBtn.isEnabled = false
                         main.post(tick)
                     }
                 } catch (e: Exception) {
@@ -482,6 +535,8 @@ class CaptureActivity : BaseActivity() {
         recBtn.isEnabled = true
         recBtn.text = "Grabar"
         liveBtn.isEnabled = true
+        timerBtn.isEnabled = true
+        stopTimer()
         info.text = idleHint()
         releaseRecorder()
         outFile?.delete()
@@ -503,6 +558,7 @@ class CaptureActivity : BaseActivity() {
         session = null
         recBtn.text = "Grabar"
         liveBtn.isEnabled = true
+        timerBtn.isEnabled = countdown == null
         val f = outFile
         if (!ok || f == null || !f.exists() || f.length() == 0L) {
             f?.delete()
@@ -546,7 +602,13 @@ class CaptureActivity : BaseActivity() {
     // Modo en vivo
     // ------------------------------------------------------------------
 
-    private fun idleHint() =
+    private fun idleHint() = when {
+        timerS > 0 -> "Temporizador de $timerS s: pulsa Grabar, escucha la cuenta atrás y salta al oír «¡Salta!». " +
+            "La app mide sola el salto que sigue a la señal y dice la altura."
+        else -> idleHintLive()
+    }
+
+    private fun idleHintLive() =
         if (live) "En vivo: arrastra la línea naranja a los pies y pulsa Grabar. El atleta quieto 1 s y luego salta: el resultado aparece solo."
         else "Encuadra y pulsa Grabar. Detén después de aterrizar."
 
@@ -568,9 +630,125 @@ class CaptureActivity : BaseActivity() {
         info.text = idleHint()
     }
 
+    // ------------------------------------------------------------------
+    // Temporizador
+    // ------------------------------------------------------------------
+
+    private fun timerLabel() = if (timerS == 0) "⏱ Sin temporizador" else "⏱ $timerS s"
+
+    private fun cycleTimer() {
+        if (recording || starting || countdown != null) return
+        timerS = TIMER_OPTIONS[(TIMER_OPTIONS.indexOf(timerS) + 1) % TIMER_OPTIONS.size]
+        prefs.edit().putInt("timerS", timerS).apply()
+        timerBtn.text = timerLabel()
+        info.text = idleHint()
+        if (timerS > 0) Voice.init(this, force = true)
+    }
+
+    private fun speak(t: String) = Voice.say(this, t, force = timerS > 0)
+
+    /** Segundos que se sigue grabando después de «¡Salta!». */
+    private fun postJumpS(): Double = when {
+        test == TestType.RJ -> 16.0
+        test.isRepeated -> 9.0
+        test.isDrop -> 3.5
+        else -> 3.0
+    }
+
+    private fun beep(long: Boolean) {
+        try {
+            val t = tone ?: ToneGenerator(AudioManager.STREAM_MUSIC, 100).also { tone = it }
+            t.startTone(if (long) ToneGenerator.TONE_PROP_BEEP2 else ToneGenerator.TONE_PROP_BEEP, if (long) 450 else 140)
+        } catch (_: Exception) {}
+    }
+
+    private fun showCount(s: String, color: Int = 0xFFFFFFFF.toInt()) {
+        countText.text = s
+        countText.setTextColor(color)
+        countText.visibility = android.view.View.VISIBLE
+    }
+
+    /**
+     * Cuenta atrás: «Prepárate», N… 1 y «¡Salta!». La grabación a alta velocidad arranca a 3 s del final
+     * (así el video no ocupa de más) y se detiene sola poco después de la señal.
+     */
+    private fun startTimer() {
+        if (countdown != null || recording || starting || camera == null) return
+        card.visibility = android.view.View.GONE
+        BigResult.hide(rootFrame)
+        goAtMs = 0L
+        var left = timerS
+        recBtn.text = "Cancelar"
+        liveBtn.isEnabled = false
+        timerBtn.isEnabled = false
+        info.text = "Prepárate: salta al oír «¡Salta!»"
+        if (!groupMode) speak("Prepárate")
+        val r = object : Runnable {
+            override fun run() {
+                if (countdown !== this) return
+                if (left > 0) {
+                    if (left <= 3 && !recording && !starting) startRecording()
+                    showCount("$left")
+                    beep(false)
+                    speak("$left")
+                    left--
+                    main.postDelayed(this, 1000)
+                } else {
+                    countdown = null
+                    goAtMs = SystemClock.elapsedRealtime()
+                    showCount(Lang.tr(this@CaptureActivity, "¡SALTA!"), 0xFF6CF08A.toInt())
+                    beep(true)
+                    speak("¡Salta!")
+                    recBtn.text = "Detener"
+                    main.postDelayed({ if (countdown == null) countText.visibility = android.view.View.GONE }, 1200)
+                    main.postDelayed(timerEnd, (postJumpS() * 1000).toLong())
+                }
+            }
+        }
+        countdown = r
+        main.postDelayed(r, if (groupMode) 2200L else 1300L)
+    }
+
+    /** Anula la cuenta atrás y lo grabado. */
+    private fun cancelTimer() {
+        stopTimer()
+        if (recording) haltRecording()?.delete()
+        recBtn.text = "Grabar"
+        recBtn.isEnabled = !starting
+        liveBtn.isEnabled = true
+        timerBtn.isEnabled = true
+        info.text = idleHint()
+        if (!starting) startPreview()
+    }
+
+    private fun stopTimer() {
+        countdown?.let { main.removeCallbacks(it) }
+        countdown = null
+        main.removeCallbacks(timerEnd)
+        goAtMs = 0L
+        if (::countText.isInitialized) countText.visibility = android.view.View.GONE
+    }
+
+    /** Fin del tramo tras la señal: se detiene la grabación y se analiza desde justo antes de «¡Salta!». */
+    private fun finishTimer() {
+        main.removeCallbacks(timerEnd)
+        if (goAtMs == 0L) return
+        if (starting) { main.postDelayed(timerEnd, 300); return }
+        countText.visibility = android.view.View.GONE
+        if (!recording) {
+            goAtMs = 0L
+            restartLive("La grabación falló. Se reinició.")
+            return
+        }
+        val goS = ((goAtMs - startMs) / 1000.0).coerceAtLeast(0.0)
+        goAtMs = 0L
+        liveHandled = true
+        onLiveJump(LiveDetector.Live(null, null, null, emptyList(), 0.0), timerGoS = goS)
+    }
+
     /** Cada cuadro de la vista previa: se lee la franja del suelo y se busca un salto terminado. */
     private fun onPreviewFrame() {
-        if (!recording || !live || liveHandled) return
+        if (!recording || !live || liveHandled || timerS > 0) return
         val st = texture.surfaceTexture ?: return
         var t = st.timestamp
         if (t == 0L) t = System.nanoTime()
@@ -608,7 +786,7 @@ class CaptureActivity : BaseActivity() {
     private fun fmt(p: String, vararg a: Any?) = String.format(Locale.getDefault(), p, *a)
 
     /** Salto detectado en la vista previa: valor provisional y medición definitiva a alta velocidad. */
-    private fun onLiveJump(l: LiveDetector.Live) {
+    private fun onLiveJump(l: LiveDetector.Live, timerGoS: Double? = null) {
         val c = cfg ?: return
         val f = haltRecording()
         startPreview()
@@ -619,8 +797,10 @@ class CaptureActivity : BaseActivity() {
         }
         info.text = "Salto detectado. Midiendo…"
         recBtn.isEnabled = false
+        if (timerGoS != null) info.text = "Midiendo el salto…"
         showCard(
-            status = fmt("Provisional (vista previa, %.0f fps) · midiendo a %d fps…", l.previewFps, c.fps),
+            status = if (timerGoS != null) fmt("Midiendo a %d fps el salto tras la señal…", c.fps)
+                else fmt("Provisional (vista previa, %.0f fps) · midiendo a %d fps…", l.previewFps, c.fps),
             big = when {
                 test.isRepeated -> fmt("%d saltos", l.eventsS.size / 2)
                 else -> l.flightS?.let { fmt("≈ %.1f cm", Calc.heightCm(it)) } ?: "…"
@@ -666,9 +846,13 @@ class CaptureActivity : BaseActivity() {
                     fun off(x: AutoDetect.Result?): Double = flightS(x)?.let { f -> liveFlight?.let { abs(f - it) } } ?: 9.0
                     val n = src.frameCount
                     if (n > 1) {
-                        r = scan(LiveDetector.window(l, t, fps, n))
+                        // Temporizador: desde 1,2 s antes de «¡Salta!» (el atleta aún quieto) hasta el final.
+                        val win = if (timerGoS != null)
+                            (((timerGoS - 1.2) * fps).toInt().coerceIn(0, n - 1))..(n - 1)
+                            else LiveDetector.window(l, t, fps, n)
+                        r = scan(win)
                         // Si no salió, o difiere mucho de la vista previa, se analiza el video entero y se queda el más coherente.
-                        if (!ok(r) || off(r) > 0.08) {
+                        if (!ok(r) || (liveFlight != null && off(r) > 0.08)) {
                             val full = scan(null)
                             if (ok(full) && (!ok(r) || off(full) < off(r))) r = full
                         }
@@ -737,7 +921,7 @@ class CaptureActivity : BaseActivity() {
             }, lp())
             cardButtons.addView(button("Repetir salto") { f.delete(); restartLive(null) }, lp())
             cardPrimary = null
-            Voice.say(this, "No se pudo medir. Repite el salto.")
+            speak("No se pudo medir. Repite el salto.")
             return
         }
 
@@ -755,7 +939,7 @@ class CaptureActivity : BaseActivity() {
             test.isDrop && out.jump.rsi != null -> Voice.num(this, out.jump.heightCm) + " centímetros. RSI " + Voice.num(this, out.jump.rsi, 2)
             else -> Voice.num(this, out.jump.heightCm) + " centímetros"
         }
-        Voice.say(this, "${athleteName()}, $said" + if (flags.contains(Technique.MSG_KNEES)) ". Atención: rodillas flexionadas al aterrizar." else "")
+        speak("${athleteName()}, $said" + if (flags.contains(Technique.MSG_KNEES)) ". Atención: rodillas flexionadas al aterrizar." else "")
         BigResult.show(rootFrame, athleteName(), bigTxt, out.detail.lineSequence().firstOrNull() ?: "",
             if (flags.isEmpty()) 0xFFFFFFFF.toInt() else 0xFFFFC04D.toInt())
 
@@ -825,13 +1009,13 @@ class CaptureActivity : BaseActivity() {
         if (!groupMode) { restartLive(null); return }
         val s = GroupSession.advance(this)
         if (s == null || s.finished) {
-            Voice.say(this, "Sesión terminada. Buen trabajo.")
+            speak("Sesión terminada. Buen trabajo.")
             card.visibility = android.view.View.GONE
             finish()
             return
         }
         topText.text = topLabel()
-        Voice.say(this, GroupSession.announce(s))
+        speak(GroupSession.announce(s))
         restartLive(null)
     }
 
@@ -866,16 +1050,29 @@ class CaptureActivity : BaseActivity() {
     /** Oculta el resultado y vuelve a grabar para el siguiente salto. */
     private fun restartLive(msg: String?) {
         cancelAutoSave()
+        stopTimer()
         cardPrimary = null
         card.visibility = android.view.View.GONE
         if (recording) haltRecording()?.delete()
         liveHandled = false
         msg?.let { Tst.makeText(this, it, Toast.LENGTH_LONG).show() }
         info.text = idleHint()
+        if (timerS > 0) {
+            // Con temporizador: vuelve a la vista previa y empieza otra cuenta atrás.
+            recBtn.isEnabled = true
+            liveBtn.isEnabled = true
+            timerBtn.isEnabled = true
+            startPreview()
+            if (camera != null) main.postDelayed({ if (!isFinishing && !recording && !starting && countdown == null &&
+                card.visibility != android.view.View.VISIBLE) startTimer() }, 1500)
+            return
+        }
         if (camera != null) startRecording() else startPreview()
     }
 
     override fun onDestroy() {
+        try { tone?.release() } catch (_: Exception) {}
+        tone = null
         work.shutdownNow()
         liveExec.shutdownNow()
         super.onDestroy()
