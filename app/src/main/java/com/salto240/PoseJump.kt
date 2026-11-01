@@ -18,11 +18,16 @@ import kotlin.math.sqrt
  * - Despegue y aterrizaje: con los cuadros más cercanos al suelo (4–22 cm), donde el pie sigue la caída
  *   libre del cuerpo; a mitad del vuelo las piernas se recogen y esos cuadros no se usan. Se resuelve
  *   y = v·u − g·u²/2 con v = g·tv/2 y se itera. Suelo local antes y después (corrige balanceo lento).
+ * - Teléfonos lentos (menos de 20 análisis por segundo) o sin cuadros cerca del suelo a un lado: la nariz
+ *   sigue en el aire una parábola de caída libre; su punto más alto, ajustado con todos los cuadros del
+ *   vuelo, fija el centro del vuelo y cada cuadro del pie cerca del suelo da el tiempo de vuelo.
+ * - Un cuadro en el suelo entre dos cuadros apenas levantados por ruido no se "corrige" hacia el aire
+ *   (antes podía crear un despegue falso unos cuadros antes).
  * - Altura = g·t²/8, igual que con plataforma de contacto y con el modo de 240 fps.
  *
  * Simulación (pose con ruido 2,5 px correlacionado, inferencia de 45 ms, 2 % de picos, piernas que se
- * recogen 6 cm): CMJ 60/60 detectados, sesgo +1,2 cm, desviación 1,4 cm; con balanceo de 4 px o deriva
- * del pie de 3 cm, 60/60 (antes 38/60 y 42/60). A 60 fps: desviación 0,8 cm.
+ * recogen 6 cm): CMJ 60/60, sesgo +1,2 cm, desviación 1,1 cm, máximo 3,4 cm (antes 6,3). A 10 análisis
+ * por segundo: desviación 2,3 cm, máximo 7,8 cm (antes 11,2). A 60 fps: desviación 0,8 cm.
  */
 class PoseJumpDetector(private val test: TestType, statureCm: Double?, private val boxCm: Double? = null) {
 
@@ -44,7 +49,7 @@ class PoseJumpDetector(private val test: TestType, statureCm: Double?, private v
 
     enum class State { NO_BODY, CALIBRATING, READY, AIR }
 
-    companion object { @JvmStatic var HI = 0.22; @JvmStatic var NS = 2 }
+    companion object { @JvmStatic var HI = 0.22; @JvmStatic var NS = 2; @JvmStatic var VERTEX = true }
 
     private val stature = (statureCm ?: 170.0).coerceIn(100.0, 230.0)
     private val buf = ArrayList<Sample>()
@@ -152,11 +157,15 @@ class PoseJumpDetector(private val test: TestType, statureCm: Double?, private v
      * dos vecinos en el mismo sentido, cuando los vecinos coinciden entre sí, se reemplaza por su media.
      * El vértice del vuelo no se toca porque ahí los vecinos están a poca distancia.
      */
-    private fun despike(v: DoubleArray, k: Double) {
+    private fun despike(v: DoubleArray, k: Double, fl: Double, thr: Double) {
         val big = maxOf(6.0 * sigma, 5.0 * k)
         for (i in 1 until v.size - 1) {
             val a = v[i - 1]; val b = v[i + 1]; val x = v[i]
-            if (abs(a - b) < big * 0.6 && abs(x - a) > big && abs(x - b) > big && (x - a) * (x - b) > 0) v[i] = (a + b) / 2
+            if (abs(a - b) < big * 0.6 && abs(x - a) > big && abs(x - b) > big && (x - a) * (x - b) > 0) {
+                // Un cuadro en el suelo entre dos cuadros apenas levantados (ruido) es real: no se sube al aire.
+                if (x > a && (a + b) / 2 > fl - 2 * thr) continue
+                v[i] = (a + b) / 2
+            }
         }
     }
 
@@ -167,7 +176,7 @@ class PoseJumpDetector(private val test: TestType, statureCm: Double?, private v
         val idx = buf.indices.filter { buf[it].foot != null }
         if (idx.size < 6) return null
         val fv = DoubleArray(idx.size) { buf[idx[it]].foot!! }
-        despike(fv, k)
+        despike(fv, k, fl, thr)
         fun t(i: Int) = buf[idx[i]].t
         fun foot(i: Int) = fv[i]
         fun yM(i: Int) = (fl - foot(i)) / k / 100.0     // altura del pie sobre el suelo (m)
@@ -211,6 +220,32 @@ class PoseJumpDetector(private val test: TestType, statureCm: Double?, private v
         }
 
         /**
+         * Instante del punto más alto del vuelo según la nariz: ajuste de y = A + B·t + a·t² con la curvatura
+         * de caída libre conocida (a = g en píxeles), quitando un punto atípico. null si hay pocos cuadros.
+         */
+        fun vertexT(r: Run, k: Double): Double? {
+            val a = g * 100.0 * k / 2
+            val pts = (r.a..r.b).mapNotNull { i -> buf[idx[i]].nose?.let { t(i) to it } }.toMutableList()
+            if (pts.size < 3 || pts.last().first - pts.first().first < 0.12) return null
+            val t0 = pts[0].first
+            fun fit(ps: List<Pair<Double, Double>>): Pair<Double, Double> {
+                var su = 0.0; var sz = 0.0; var suu = 0.0; var suz = 0.0
+                for ((tt, y) in ps) { val u = tt - t0; val z = y - a * u * u; su += u; sz += z; suu += u * u; suz += u * z }
+                val n = ps.size.toDouble(); val den = n * suu - su * su
+                if (abs(den) < 1e-12) return 0.0 to 0.0
+                val b = (n * suz - su * sz) / den
+                return (sz - b * su) / n to b
+            }
+            var (A, B) = fit(pts)
+            if (pts.size >= 5) {
+                val res = pts.map { (tt, y) -> val u = tt - t0; abs(y - (A + B * u + a * u * u)) }
+                val worst = res.indices.maxByOrNull { res[it] }!!
+                if (res[worst] > maxOf(4.0 * sigma, 3.0 * k)) { pts.removeAt(worst); fit(pts).let { A = it.first; B = it.second } }
+            }
+            return t0 - B / (2 * a)
+        }
+
+        /**
          * Tiempo de vuelo con los cuadros más cercanos al suelo (entre 4 y 30 cm): cerca del despegue y del
          * aterrizaje el pie sigue la caída libre del cuerpo, mientras que a mitad del vuelo las piernas se recogen.
          * Cada cuadro da un instante de despegue (o aterrizaje) resolviendo y = v·u − g·u²/2 con v = g·tv/2;
@@ -245,6 +280,27 @@ class PoseJumpDetector(private val test: TestType, statureCm: Double?, private v
             // Respaldo: cruce del umbral interpolado entre el último apoyo y el primer cuadro en el aire.
             val to0 = cross(r.a - 1)
             val ld0 = cross(r.b)
+            // Con la cabeza: en el aire sigue una parábola de caída libre simétrica respecto del punto más alto.
+            // Ese instante (vértice) sale con precisión de todos los cuadros del vuelo; así cada cuadro del pie
+            // cerca del suelo, de cualquiera de los dos lados, da el tiempo de vuelo.
+            val tv0 = if (VERTEX) vertexT(r, k) else null
+            // Se usa cuando a un lado no hay cuadros cerca del suelo o con menos de 20 análisis por segundo.
+            val slow = (r.a..r.b + 1).map { t(it) - t(it - 1) }.sorted().let { it[it.size / 2] } > 0.05
+            if (tv0 != null && tv0 > t(r.a - 1) && tv0 < t(r.b + 1) && (up.isEmpty() || down.isEmpty() || slow)) {
+                fun est(ti: Double, h: Double) = 2 * sqrt((ti - tv0) * (ti - tv0) + 2 * max(0.0, h) / g)
+                val eUp = up.map { est(t(it), hA(it)) }
+                val eDn = down.map { est(t(it), hB(it)) }
+                // Sin cuadros cerca del suelo en un lado: el cruce del umbral de vuelo de ese lado.
+                val sUp = eUp.takeIf { it.isNotEmpty() }?.average() ?: est(to0, thrM)
+                val sDn = eDn.takeIf { it.isNotEmpty() }?.average() ?: est(ld0, thrM)
+                // Peso igual a cada lado: una inclinación del tronco que corra el vértice se compensa.
+                val wUp = if (eUp.isNotEmpty()) 1.0 else 0.35
+                val wDn = if (eDn.isNotEmpty()) 1.0 else 0.35
+                val tvv = (sUp * wUp + sDn * wDn) / (wUp + wDn)
+                val toV = (tv0 - tvv / 2).coerceIn(t(r.a - 1) - 0.06, t(r.a))
+                val ldV = (tv0 + tvv / 2).coerceIn(t(r.b), t(r.b + 1) + 0.06)
+                return Triple(ldV - toV, toV, ldV)
+            }
             var to = to0; var ld = ld0
             var tv = max(0.1, ld - to)
             repeat(8) {

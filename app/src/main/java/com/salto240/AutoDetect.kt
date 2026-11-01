@@ -332,8 +332,9 @@ object AutoDetect {
                     while (a - 1 >= minStart && raw[a - 1]) a--
                     if (next - j - 1 > maxGap) break
                     next = a
-                    // Un cuadro suelto puede ser ruido: solo un contacto de 2 cuadros o más adelanta el aterrizaje.
-                    if (j - a + 1 >= 2) best = a
+                    // Un cuadro suelto puede ser ruido: a 240 fps solo un contacto de 2 cuadros o más adelanta el
+                    // aterrizaje; a 120 fps o menos cada cuadro dura el doble y basta con uno.
+                    if (j - a + 1 >= (if (fps >= 200) 2 else 1)) best = a
                     j = a - 1
                 } else j--
             }
