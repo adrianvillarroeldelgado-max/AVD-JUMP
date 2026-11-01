@@ -23,11 +23,16 @@ import kotlin.math.roundToInt
  *    lo último que toca es la punta del pie, así que el talón levantado no adelanta el despegue.
  *
  * Despegue = primer cuadro sin contacto; aterrizaje = primer cuadro con contacto (como a mano).
+ * Si el golpe del aterrizaje hace vibrar el teléfono y la suela "sale" de la fila del suelo unos cuadros,
+ * cuenta el primer contacto (ver earlyLanding).
  */
 object AutoDetect {
 
     /** Tolerancia en filas bajo la que todavía se considera apoyo (para pruebas). */
     @JvmStatic var TOL = 1
+    /** Corregir el aterrizaje cuando la vibración corta el primer contacto (para pruebas). */
+    @JvmStatic var EARLY_LANDING = true
+    @JvmStatic var DEBUG: ((String) -> Unit)? = null
 
     /** Geometría de la banda que leen la vista previa y el video. */
     const val ROWS = 36
@@ -280,18 +285,18 @@ object AutoDetect {
         // Basta una columna: al despegar y al aterrizar solo toca la punta del pie.
         val lowRow = floor - TOL
         val topRow = max(floorE, floorS)
-        val contact = BooleanArray(n) { t ->
+        fun touches(t: Int, from: Int): Boolean {
             val f = c[t]
-            var hit = false
-            loop@ for (col in 0 until cols) {
+            for (col in 0 until cols) {
                 if (!colOk[col]) continue
-                for (r in max(1, lowRow)..topRow) {
+                for (r in max(1, from)..topRow) {
                     val i = r * cols + col
-                    if (abs(f[i] - A[i]) > tau && abs(f[i - cols] - A[i - cols]) > tau) { hit = true; break@loop }
+                    if (abs(f[i] - A[i]) > tau && abs(f[i - cols] - A[i - cols]) > tau) return true
                 }
             }
-            hit
+            return false
         }
+        val contact = BooleanArray(n) { t -> touches(t, lowRow) }
 
         // Comprobación de contraste: de pie debe haber contacto y en la referencia "sin pies", no.
         val standOk = endIdx.count { contact[it] } >= 0.7 * endIdx.size
@@ -299,20 +304,40 @@ object AutoDetect {
         if (!standOk || !airOk) return Result(error = E_CONTRAST) to Float.MAX_VALUE
         val quality = (percentile(diffE, 0.98f) / 80f).coerceIn(0f, 1f)
 
+        DEBUG?.let { d -> d("floor=$floor floorE=$floorE floorS=$floorS tau=$tau aStart=$aIsStart A=${aIdx.first()}..${aIdx.last()}\n" +
+            (0 until n).joinToString("") { if (contact[it]) "#" else "." }) }
+        val raw = contact.copyOf()
         smooth(contact, max(2, (0.012 * fps).roundToInt()))
 
         // Contacto estricto (solo la fila del suelo): sirve para afinar el aterrizaje, que con
         // tolerancia se marcaría cuando la punta aún está a unos milímetros del suelo.
-        fun strictContact(t: Int): Boolean {
-            val f = c[t]
-            for (col in 0 until cols) {
-                if (!colOk[col]) continue
-                for (r in max(1, floor)..topRow) {
-                    val i = r * cols + col
-                    if (abs(f[i] - A[i]) > tau && abs(f[i - cols] - A[i - cols]) > tau) return true
-                }
+        fun strictContact(t: Int): Boolean = touches(t, floor)
+        /**
+         * El golpe del aterrizaje hace vibrar el teléfono: justo después del primer contacto la imagen se
+         * mueve y la suela "desaparece" de la fila del suelo unos cuadros. El filtro de ruido borraría ese
+         * primer contacto y el aterrizaje saldría tarde. Si antes del aterrizaje hay un contacto de al menos
+         * 2 cuadros separado por menos de 30 ms, el aterrizaje es ese.
+         */
+        fun earlyLanding(ld: Int, takeoff: Int): Int {
+            if (!EARLY_LANDING) return ld
+            val maxGap = max(2, (0.03 * fps).roundToInt())
+            val look = max(4, (0.06 * fps).roundToInt())
+            val minStart = takeoff + max(2, (0.10 * fps).roundToInt())
+            var best = ld
+            var next = ld          // primer cuadro con contacto encontrado hasta ahora
+            var j = ld - 1
+            while (j >= max(minStart, ld - look)) {
+                if (raw[j]) {
+                    var a = j
+                    while (a - 1 >= minStart && raw[a - 1]) a--
+                    if (next - j - 1 > maxGap) break
+                    next = a
+                    // Un cuadro suelto puede ser ruido: solo un contacto de 2 cuadros o más adelanta el aterrizaje.
+                    if (j - a + 1 >= 2) best = a
+                    j = a - 1
+                } else j--
             }
-            return false
+            return best
         }
         fun refineLanding(ld: Int): Int {
             if (TOL == 0) return ld
@@ -344,7 +369,7 @@ object AutoDetect {
         val res = when (test.base) {
             TestType.RJ -> {
                 val ev = mutableListOf<Int>()
-                flights.forEach { (_, r) -> ev.add(r.start); ev.add(refineLanding(r.end + 1)) }
+                flights.forEach { (_, r) -> ev.add(r.start); ev.add(refineLanding(earlyLanding(r.end + 1, r.start))) }
                 Result(events = ev, preContact = rs.getOrNull(flights.first().index - 1)?.len, quality = quality)
             }
             TestType.DJ -> {
@@ -353,13 +378,13 @@ object AutoDetect {
                     ?: flights.maxByOrNull { it.value.len }!!
                 val prev = rs.getOrNull(f.index - 1)
                 val cIdx = if (prev != null && prev.contact && prev.start > 0) prev.start else null
-                Result(takeoff = f.value.start, landing = refineLanding(f.value.end + 1), contact = cIdx,
+                Result(takeoff = f.value.start, landing = refineLanding(earlyLanding(f.value.end + 1, f.value.start)), contact = cIdx,
                     preContact = prev?.len, quality = quality,
                     error = if (cIdx == null) "No se detectó el contacto inicial tras la caída; márcalo a mano." else null)
             }
             else -> {
                 val f = flights.maxByOrNull { it.value.len }!!
-                Result(takeoff = f.value.start, landing = refineLanding(f.value.end + 1),
+                Result(takeoff = f.value.start, landing = refineLanding(earlyLanding(f.value.end + 1, f.value.start)),
                     preContact = rs.getOrNull(f.index - 1)?.len, quality = quality)
             }
         }

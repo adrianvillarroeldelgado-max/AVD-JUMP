@@ -12,13 +12,17 @@ import kotlin.math.sqrt
  * - Suelo: el nivel estable más bajo del pie más bajo. Al caminar siempre hay un pie apoyado, así que no hay "vuelo".
  * - Escala: distancia nariz–suela en reposo ≈ 91 % de la estatura de la ficha. Solo fija umbrales en cm:
  *   la altura sale del tiempo de vuelo, así que un error de escala casi no influye.
- * - Despegue y aterrizaje: se ajusta una parábola de caída libre (g conocida) a los cuadros cercanos al
- *   despegue y al aterrizaje, y se buscan sus cruces con el suelo. Así se miden milisegundos aunque la
- *   cámara vaya a 30 fps, y encoger las piernas a mitad del vuelo casi no influye.
+ * - Vuelo: el pie debe subir más de 6 cm sobre el suelo (4 cm en saltos repetidos). Así el balanceo y la
+ *   deriva del punto del pie al flexionar las rodillas (el modelo lo "sube" unos cm en sentadilla) no se
+ *   confunden con un despegue. Los picos sueltos de un cuadro (errores del modelo) se quitan antes.
+ * - Despegue y aterrizaje: con los cuadros más cercanos al suelo (4–22 cm), donde el pie sigue la caída
+ *   libre del cuerpo; a mitad del vuelo las piernas se recogen y esos cuadros no se usan. Se resuelve
+ *   y = v·u − g·u²/2 con v = g·tv/2 y se itera. Suelo local antes y después (corrige balanceo lento).
  * - Altura = g·t²/8, igual que con plataforma de contacto y con el modo de 240 fps.
  *
- * Simulación (pose con ruido de 1,5 px, 3 px/cm): a 30 fps sesgo +0,05 cm y desviación 0,25 cm;
- * a 60 fps +0,03 ± 0,17 cm. Drop Jump: contacto ±4 ms. Sin saltos falsos al caminar o trotar.
+ * Simulación (pose con ruido 2,5 px correlacionado, inferencia de 45 ms, 2 % de picos, piernas que se
+ * recogen 6 cm): CMJ 60/60 detectados, sesgo +1,2 cm, desviación 1,4 cm; con balanceo de 4 px o deriva
+ * del pie de 3 cm, 60/60 (antes 38/60 y 42/60). A 60 fps: desviación 0,8 cm.
  */
 class PoseJumpDetector(private val test: TestType, statureCm: Double?, private val boxCm: Double? = null) {
 
@@ -39,6 +43,8 @@ class PoseJumpDetector(private val test: TestType, statureCm: Double?, private v
     }
 
     enum class State { NO_BODY, CALIBRATING, READY, AIR }
+
+    companion object { @JvmStatic var HI = 0.22; @JvmStatic var NS = 2 }
 
     private val stature = (statureCm ?: 170.0).coerceIn(100.0, 230.0)
     private val buf = ArrayList<Sample>()
@@ -141,12 +147,29 @@ class PoseJumpDetector(private val test: TestType, statureCm: Double?, private v
         return out
     }
 
+    /**
+     * Quita picos sueltos del pie (errores del modelo de un cuadro): un punto que se separa mucho de sus
+     * dos vecinos en el mismo sentido, cuando los vecinos coinciden entre sí, se reemplaza por su media.
+     * El vértice del vuelo no se toca porque ahí los vecinos están a poca distancia.
+     */
+    private fun despike(v: DoubleArray, k: Double) {
+        val big = maxOf(6.0 * sigma, 5.0 * k)
+        for (i in 1 until v.size - 1) {
+            val a = v[i - 1]; val b = v[i + 1]; val x = v[i]
+            if (abs(a - b) < big * 0.6 && abs(x - a) > big && abs(x - b) > big && (x - a) * (x - b) > 0) v[i] = (a + b) / 2
+        }
+    }
+
     private fun detect(fl: Double, k: Double): Event? {
-        val thr = thrPx(k)
+        // Umbral de vuelo alto (6 cm): el balanceo y la deriva del punto del pie al flexionar no cuentan como vuelo.
+        // En saltos repetidos (pogo: vuelos de ~10 cm) basta con 4 cm: no hay sentadilla previa que mueva el punto.
+        val thr = maxOf((if (test.isRepeated) 4.0 else 6.0) * k, (if (test.isRepeated) 4.0 else 5.0) * sigma, 3.0)
         val idx = buf.indices.filter { buf[it].foot != null }
         if (idx.size < 6) return null
+        val fv = DoubleArray(idx.size) { buf[idx[it]].foot!! }
+        despike(fv, k)
         fun t(i: Int) = buf[idx[i]].t
-        fun foot(i: Int) = buf[idx[i]].foot!!
+        fun foot(i: Int) = fv[i]
         fun yM(i: Int) = (fl - foot(i)) / k / 100.0     // altura del pie sobre el suelo (m)
 
         val c = BooleanArray(idx.size) { foot(it) >= fl - thr }
@@ -187,41 +210,56 @@ class PoseJumpDetector(private val test: TestType, statureCm: Double?, private v
             return t(i) + f * (t(i + 1) - t(i))
         }
 
-        /** Tiempo de vuelo: parábola de caída libre ajustada a los cuadros cercanos al despegue y al aterrizaje. */
+        /**
+         * Tiempo de vuelo con los cuadros más cercanos al suelo (entre 4 y 30 cm): cerca del despegue y del
+         * aterrizaje el pie sigue la caída libre del cuerpo, mientras que a mitad del vuelo las piernas se recogen.
+         * Cada cuadro da un instante de despegue (o aterrizaje) resolviendo y = v·u − g·u²/2 con v = g·tv/2;
+         * se itera porque v depende del propio tiempo de vuelo.
+         */
         fun flight(r: Run): Triple<Double, Double, Double> {
-            val t0 = t(r.a); val t1 = t(r.b)
-            val w = min(0.12, (t1 - t0) / 3)
-            val ids = (r.a..r.b).filter { t(it) - t0 <= w || t1 - t(it) <= w }
-            if (ids.size >= 4) {
-                // y + g/2·u² = A − g/2·tc² + g·tc·u  → recta en u
-                var su = 0.0; var sz = 0.0; var suu = 0.0; var suz = 0.0
-                for (i in ids) {
-                    val u = t(i) - t0
-                    val z = yM(i) + g / 2 * u * u
-                    su += u; sz += z; suu += u * u; suz += u * z
-                }
-                val nn = ids.size.toDouble()
-                val den = nn * suu - su * su
-                if (abs(den) > 1e-12) {
-                    val c1 = (nn * suz - su * sz) / den
-                    val c0 = (sz - c1 * su) / nn
-                    val tc = c1 / g
-                    val apex = c0 + g / 2 * tc * tc
-                    if (apex > 0) {
-                        val tv = 2 * sqrt(2 * apex / g)
-                        val to = t0 + tc - tv / 2
-                        val ld = t0 + tc + tv / 2
-                        if (to in (t(r.a - 1) - 0.03)..(t(r.a) + 0.01) && ld in (t(r.b) - 0.01)..(t(r.b + 1) + 0.03))
-                            return Triple(tv, to, ld)
-                    }
-                }
+            val lo = maxOf(if (test.isRepeated) 0.025 else 0.04, 3.0 * sigma / k / 100.0)
+            val hi = HI
+            val mid = (t(r.a) + t(r.b)) / 2
+            // Suelo local: mediana del pie en los apoyos antes y después (corrige balanceo e inclinación lenta).
+            fun localFloor(a: Int, b: Int): Double? {
+                if (b < a) return null
+                val xs = (a..b).map { foot(it) }.sorted()
+                return xs[xs.size / 2]
             }
-            val to = cross(r.a - 1)
-            val ld = cross(r.b)
-            var tv = ld - to
-            repeat(3) { tv = (ld - to) + 2 * thrM / (g * max(tv, 0.05) / 2) }
-            val corr = (tv - (ld - to)) / 2
-            return Triple(tv, to - corr, ld + corr)
+            val before = runs.lastOrNull { it.contact && it.b < r.a }
+            val after = runs.firstOrNull { it.contact && it.a > r.b }
+            val flA = before?.let { rb ->
+                val a0 = (rb.a..rb.b).firstOrNull { t(it) >= t(rb.b) - 1.2 } ?: rb.a
+                val a1 = (rb.a..rb.b).lastOrNull { t(it) <= t(rb.b) - 0.6 } ?: rb.b
+                localFloor(a0, maxOf(a0, a1))
+            }?.takeIf { abs(it - fl) < 4 * k } ?: fl
+            val flB = after?.let { ra ->
+                val b0 = (ra.a..ra.b).firstOrNull { t(it) >= t(ra.a) + 0.35 } ?: ra.a
+                val b1 = (ra.a..ra.b).lastOrNull { t(it) <= t(ra.a) + 1.2 } ?: ra.b
+                localFloor(b0, maxOf(b0, b1))
+            }?.takeIf { abs(it - fl) < 4 * k } ?: fl
+            fun hA(i: Int) = (flA - foot(i)) / k / 100.0
+            fun hB(i: Int) = (flB - foot(i)) / k / 100.0
+            val up = (r.a..r.b).filter { t(it) < mid && hA(it) in lo..hi }.take(NS)
+            val down = (r.a..r.b).filter { t(it) > mid && hB(it) in lo..hi }.takeLast(NS)
+            // Respaldo: cruce del umbral interpolado entre el último apoyo y el primer cuadro en el aire.
+            val to0 = cross(r.a - 1)
+            val ld0 = cross(r.b)
+            var to = to0; var ld = ld0
+            var tv = max(0.1, ld - to)
+            repeat(8) {
+                val v = g * tv / 2
+                fun u(h: Double): Double { val d = v * v - 2 * g * h; return if (d <= 0) v / g else (v - sqrt(d)) / g }
+                if (up.isNotEmpty()) to = up.map { t(it) - u(hA(it)) }.average()
+                else to = to0 - u(thrM) + 0.0
+                if (down.isNotEmpty()) ld = down.map { t(it) + u(hB(it)) }.average()
+                else ld = ld0 + u(thrM)
+                // Entre el último cuadro de apoyo y el primero en el aire (y al revés al aterrizar).
+                to = to.coerceIn(t(r.a - 1) - 0.06, t(r.a))
+                ld = ld.coerceIn(t(r.b), t(r.b + 1) + 0.06)
+                tv = ld - to
+            }
+            return Triple(tv, to, ld)
         }
 
         fun rep(r: Run, contactS: Double?): Rep? {

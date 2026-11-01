@@ -451,7 +451,14 @@ class AiCaptureActivity : BaseActivity() {
         val ev = detector.add(PoseJumpDetector.Sample(tsNs / 1e9, foot, nose))
 
         overlay.update(p, uw, uh, detector.floorPx, detector.state)
-        fpsText.text = fmt("IA en el teléfono · %.0f fps", fps)
+        // Con menos de 18 análisis por segundo la medición pierde precisión (pocos cuadros cerca del suelo).
+        if (fps > 0 && fps < 18) {
+            fpsText.text = fmt("IA en el teléfono · %.0f fps · precisión baja: más luz o modo 240 fps", fps)
+            fpsText.setTextColor(0xFFFFC04D.toInt())
+        } else {
+            fpsText.text = fmt("IA en el teléfono · %.0f fps", fps)
+            fpsText.setTextColor(0xFF8C99AD.toInt())
+        }
 
         // Indicaciones
         val body = if (foot != null && nose != null) (foot - nose) / uh else null
