@@ -22,6 +22,14 @@ import kotlin.math.roundToInt
  *    la fila más baja con pie visible: hay contacto mientras esa fila llega al suelo. Al despegar,
  *    lo último que toca es la punta del pie, así que el talón levantado no adelanta el despegue.
  *
+ * 5. Contacto (desde la versión 1.6.11): en cada cuadro se sigue el calzado desde la pierna hacia abajo
+ *    por los píxeles cambiados conectados y se toma su punto más bajo. Hay apoyo si llega a la fila del
+ *    suelo. La sombra del zapato con luz lateral y el reflejo en un suelo brillante quedan bajo la línea:
+ *    de pie se pegan a la suela, pero al despegar aparece una franja de suelo sin cambios y dejan de contar
+ *    (antes alargaban el apoyo: despegue tarde y aterrizaje temprano, hasta 14 cm menos de altura).
+ *    La fila del suelo es la más alta de las estimaciones de pie, y sube sobre un "valle" (fila débil entre
+ *    la suela y el reflejo). Si el calzado no forma un bloque continuo se usa el criterio anterior.
+ *
  * Despegue = primer cuadro sin contacto; aterrizaje = primer cuadro con contacto (como a mano).
  * Si el golpe del aterrizaje hace vibrar el teléfono y la suela "sale" de la fila del suelo unos cuadros,
  * cuenta el primer contacto (ver earlyLanding).
@@ -32,6 +40,8 @@ object AutoDetect {
     @JvmStatic var TOL = 1
     /** Corregir el aterrizaje cuando la vibración corta el primer contacto (para pruebas). */
     @JvmStatic var EARLY_LANDING = true
+    /** Contacto por bloque conectado que sube desde el suelo (ignora sombras y reflejos). */
+    @JvmStatic var BLOCKS = true
     @JvmStatic var DEBUG: ((String) -> Unit)? = null
 
     /** Geometría de la banda que leen la vista previa y el video. */
@@ -267,8 +277,29 @@ object AutoDetect {
             for (r in rows - 1 downTo 0) if (counts[r] >= need) return r
             return null
         }
-        val floorE = floorRow(maskE) ?: return (Result(error = E_CONTRAST) to Float.MAX_VALUE)
-        val floorS = if (useS) floorRow(maskS) ?: floorE else floorE
+        /**
+         * Reflejo (suelo brillante) o sombra bajo el calzado: son filas bajo la suela donde el cambio es mucho
+         * más débil que en la suela. La fila del suelo sube hasta la última fila con cambio fuerte.
+         */
+        fun liftFloor(fr: Int, mask: BooleanArray, diff: FloatArray): Int {
+            if (!BLOCKS) return fr
+            fun strength(r: Int): Float? {
+                val v = (0 until cols).filter { mask[r * cols + it] }.map { diff[r * cols + it] }
+                return if (v.size < 2) null else median(v.toFloatArray())
+            }
+            var f = fr
+            // Un "valle" (fila vacía o mucho más débil que la suela y que lo de abajo) entre el calzado y lo de
+            // abajo: lo de abajo es reflejo o sombra, no el pie. La fila del suelo queda sobre el valle.
+            for (gRow in fr - 1 downTo max(1, fr - 6)) {
+                val sg = strength(gRow) ?: 0f
+                val below = strength(gRow + 1) ?: 0f
+                val above = (max(0, gRow - 4) until gRow).mapNotNull { strength(it) }.maxOrNull() ?: continue
+                if (strength(gRow - 1) != null && sg < 0.5f * above && sg < 0.8f * below) { f = gRow - 1; break }
+            }
+            return f
+        }
+        val floorE = floorRow(maskE)?.let { liftFloor(it, maskE, diffE) } ?: return (Result(error = E_CONTRAST) to Float.MAX_VALUE)
+        val floorS = if (useS) floorRow(maskS)?.let { liftFloor(it, maskS, diffS) } ?: floorE else floorE
         val floor = min(floorE, floorS)
 
         // Columnas donde pueden estar los pies (con margen por si aterriza desplazado).
@@ -296,12 +327,91 @@ object AutoDetect {
             }
             return false
         }
-        val contact = BooleanArray(n) { t -> touches(t, lowRow) }
+        /*
+         * Contacto "de cuerpo entero": un bloque conectado de píxeles cambiados que llega a la fila del suelo
+         * y sube al menos la mitad de la altura que ocupa el pie de pie. La sombra del calzado en el suelo
+         * (luz lateral) y su reflejo en un suelo brillante quedan pegados al suelo y bajos: en cuanto el pie
+         * sube unos cm, entre ellos y el zapato aparece una franja de suelo y dejan de contar como apoyo.
+         */
+        val seen = BooleanArray(rows * cols)
+        val stack = IntArray(rows * cols)
+        // Fila más alta del bloque conectado que nace en las filas from..to (rows si no hay ninguno).
+        fun topOfBlocks(isOn: (Int) -> Boolean, from: Int, to: Int, stopAt: Int): Int {
+            java.util.Arrays.fill(seen, false)
+            var best = rows
+            for (r0 in max(0, from)..min(rows - 1, to)) for (col in 0 until cols) {
+                if (!colOk[col]) continue
+                val i0 = r0 * cols + col
+                if (seen[i0] || !isOn(i0)) continue
+                var sp = 0; stack[sp++] = i0; seen[i0] = true
+                while (sp > 0) {
+                    val i = stack[--sp]
+                    val r = i / cols; val cc = i % cols
+                    if (r < best) { best = r; if (best <= stopAt) return best }
+                    if (r > 0) { val j = i - cols; if (!seen[j] && isOn(j)) { seen[j] = true; stack[sp++] = j } }
+                    if (r < rows - 1) { val j = i + cols; if (!seen[j] && isOn(j)) { seen[j] = true; stack[sp++] = j } }
+                    if (cc > 0) { val j = i - 1; if (!seen[j] && isOn(j)) { seen[j] = true; stack[sp++] = j } }
+                    if (cc < cols - 1) { val j = i + 1; if (!seen[j] && isOn(j)) { seen[j] = true; stack[sp++] = j } }
+                }
+            }
+            return best
+        }
+        // Altura del pie de pie (filas desde el suelo hasta lo más alto del bloque).
+        val standTop = topOfBlocks({ maskE[it] }, floor, topRow, -1)
+        val standH = if (standTop < rows) floor - standTop + 1 else 0
+        val needTop = floor - max(3, ceil(0.45f * standH).toInt())
+        /**
+         * Punto más bajo del calzado: desde la pierna y el zapato (filas altas de la banda) se baja por los
+         * píxeles cambiados conectados. De pie incluye la sombra o el reflejo pegados a la suela; al despegar,
+         * entre la suela y el suelo aparece una franja sin cambios y el punto más bajo sube de golpe.
+         */
+        fun bottomOf(t: Int): Int {
+            val f = c[t]
+            java.util.Arrays.fill(seen, false)
+            var low = -1
+            for (r0 in 0..max(0, needTop)) for (col in 0 until cols) {
+                if (!colOk[col]) continue
+                val i0 = r0 * cols + col
+                if (seen[i0] || abs(f[i0] - A[i0]) <= tau) continue
+                var sp = 0; stack[sp++] = i0; seen[i0] = true
+                while (sp > 0) {
+                    val i = stack[--sp]
+                    val r = i / cols; val cc = i % cols
+                    if (r > low) low = r
+                    fun push(j: Int) { if (!seen[j] && abs(f[j] - A[j]) > tau) { seen[j] = true; stack[sp++] = j } }
+                    if (r > 0) push(i - cols)
+                    if (r < rows - 1) push(i + cols)
+                    if (cc > 0) push(i - 1)
+                    if (cc < cols - 1) push(i + 1)
+                }
+            }
+            return low
+        }
+        var useBlocks = BLOCKS && standH >= 6 && needTop >= 0
+        val bottoms = if (useBlocks) IntArray(n) { bottomOf(it) } else IntArray(0)
+        // Punto más bajo de pie, al final y (si el atleta empezó en cuadro) al principio. La sombra o el reflejo
+        // pegados a la suela solo lo bajan, así que la fila del suelo es la más alta de las estimaciones.
+        fun medBottom(idx: List<Int>): Int {
+            // Percentil 20: si el reflejo o la sombra se despegan de la suela en algunos cuadros, queda la suela.
+            val v = idx.map { bottoms[it] }.filter { it >= 0 }.sorted()
+            return if (v.size >= 3 && v.size >= idx.size / 2) v[(v.size - 1) / 5] else -1
+        }
+        val bE = if (useBlocks) medBottom(endIdx) else -1
+        val bS = if (useBlocks && useS) medBottom(startIdx) else -1
+        val bStand = max(bE, bS)
+        if (bE < 0 || bE < needTop + 2) useBlocks = false
+        val lineRow = listOf(floor, bE, bS).filter { it >= 0 }.minOrNull() ?: floor
+        var contact = BooleanArray(n) { t -> if (useBlocks) bottoms[t] >= lineRow - TOL else touches(t, lowRow) }
+        DEBUG?.let { it("bloques=$useBlocks bStand=$bStand lineRow=$lineRow needTop=$needTop standH=$standH") }
 
         // Comprobación de contraste: de pie debe haber contacto y en la referencia "sin pies", no.
-        val standOk = endIdx.count { contact[it] } >= 0.7 * endIdx.size
-        val airOk = aIdx.count { !contact[it] } >= 0.7 * aIdx.size
-        if (!standOk || !airOk) return Result(error = E_CONTRAST) to Float.MAX_VALUE
+        fun okRefs(cn: BooleanArray) = endIdx.count { cn[it] } >= 0.7 * endIdx.size && aIdx.count { !cn[it] } >= 0.7 * aIdx.size
+        if (useBlocks && !okRefs(contact)) {
+            // Calzado o fondo que no forman un bloque continuo: criterio anterior (pie en la fila del suelo).
+            useBlocks = false
+            contact = BooleanArray(n) { t -> touches(t, lowRow) }
+        }
+        if (!okRefs(contact)) return Result(error = E_CONTRAST) to Float.MAX_VALUE
         val quality = (percentile(diffE, 0.98f) / 80f).coerceIn(0f, 1f)
 
         DEBUG?.let { d -> d("floor=$floor floorE=$floorE floorS=$floorS tau=$tau aStart=$aIsStart A=${aIdx.first()}..${aIdx.last()}\n" +
@@ -311,7 +421,7 @@ object AutoDetect {
 
         // Contacto estricto (solo la fila del suelo): sirve para afinar el aterrizaje, que con
         // tolerancia se marcaría cuando la punta aún está a unos milímetros del suelo.
-        fun strictContact(t: Int): Boolean = touches(t, floor)
+        fun strictContact(t: Int): Boolean = if (useBlocks) bottoms[t] >= lineRow else touches(t, floor)
         /**
          * El golpe del aterrizaje hace vibrar el teléfono: justo después del primer contacto la imagen se
          * mueve y la suela "desaparece" de la fila del suelo unos cuadros. El filtro de ruido borraría ese

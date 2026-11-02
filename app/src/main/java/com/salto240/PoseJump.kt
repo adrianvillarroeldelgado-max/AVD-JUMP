@@ -23,6 +23,12 @@ import kotlin.math.sqrt
  *   vuelo, fija el centro del vuelo y cada cuadro del pie cerca del suelo da el tiempo de vuelo.
  * - Un cuadro en el suelo entre dos cuadros apenas levantados por ruido no se "corrige" hacia el aire
  *   (antes podía crear un despegue falso unos cuadros antes).
+ * - Solo cuentan los saltos de verdad (desde la versión 1.6.11). Si el pie lejano no se ve bien (vista de
+ *   costado), al dar un paso o acomodar un pie parecía que "volaba". Ahora cada vuelo debe levantar todo el
+ *   cuerpo: la cabeza (o la cadera) sube al menos el 45 % de la altura calculada y se curva como un cuerpo
+ *   en caída libre (entre 0,35 y 1,7 g). En CMJ y SJ, además, la cabeza baja 8 cm o más antes de despegar
+ *   (contramovimiento o posición de 90°). En la simulación, de 1.800 saltos falsos en 1.200 videos sin
+ *   saltar (pasos, trote, cambios de apoyo, sentadillas) se pasa a 6, sin perder saltos reales.
  * - Altura = g·t²/8, igual que con plataforma de contacto y con el modo de 240 fps.
  *
  * Simulación (pose con ruido 2,5 px correlacionado, inferencia de 45 ms, 2 % de picos, piernas que se
@@ -32,7 +38,7 @@ import kotlin.math.sqrt
 class PoseJumpDetector(private val test: TestType, statureCm: Double?, private val boxCm: Double? = null) {
 
     /** Un cuadro: tiempo (s) y coordenadas verticales en píxeles (y crece hacia abajo). null = no se ve. */
-    data class Sample(val t: Double, val foot: Double?, val nose: Double?)
+    data class Sample(val t: Double, val foot: Double?, val nose: Double?, val hip: Double? = null)
 
     data class Rep(
         val flightS: Double,
@@ -49,7 +55,11 @@ class PoseJumpDetector(private val test: TestType, statureCm: Double?, private v
 
     enum class State { NO_BODY, CALIBRATING, READY, AIR }
 
-    companion object { @JvmStatic var HI = 0.22; @JvmStatic var NS = 2; @JvmStatic var VERTEX = true }
+    companion object { @JvmStatic var HI = 0.22; @JvmStatic var NS = 2; @JvmStatic var VERTEX = true; @JvmStatic var CHECK_RISE = true; @JvmStatic var CURV = 0.35; @JvmStatic var MINPTS = 4; @JvmStatic var CURVMAX = 1.7; @JvmStatic var lastReject = "" }
+
+    /** Movimientos descartados por no ser un salto (pasos, cambios de apoyo, sentadillas). */
+    var rejections = 0
+        private set
 
     private val stature = (statureCm ?: 170.0).coerceIn(100.0, 230.0)
     private val buf = ArrayList<Sample>()
@@ -318,10 +328,81 @@ class PoseJumpDetector(private val test: TestType, statureCm: Double?, private v
             return Triple(tv, to, ld)
         }
 
-        fun rep(r: Run, contactS: Double?): Rep? {
+        /**
+         * En un salto de verdad sube todo el cuerpo: desde el despegue hasta el punto más alto, la cabeza (o la
+         * cadera) sube lo mismo que el centro de masa, h = g·t²/8. Al dar un paso, acomodar un pie, trotar o
+         * hacer una sentadilla el pie se levanta (o el modelo lo "sube"), pero la cabeza casi no sube.
+         * Esto evita contar intentos no realizados, sobre todo cuando el pie lejano no se ve bien.
+         */
+        fun bodyRiseOk(r: Run, to: Double, ld: Double, hCm: Double): Boolean {
+            val lo = max(0, r.a - 3); val hi = min(idx.size - 1, r.b + 3)
+            fun series(get: (Sample) -> Double?) = (lo..hi).mapNotNull { i -> get(buf[idx[i]])?.let { t(i) to it } }
+            val nose = series { it.nose }
+            val inAir = { ps: List<Pair<Double, Double>> -> ps.count { it.first in to..ld } }
+            val pts = when {
+                inAir(nose) >= 2 -> nose
+                else -> series { it.hip }.takeIf { inAir(it) >= 2 }
+            } ?: return true     // sin cabeza ni cadera visibles no se puede comprobar
+            fun at(tt: Double): Double? {
+                val b = pts.indexOfFirst { it.first >= tt }
+                if (b <= 0) return null
+                val (ta, ya) = pts[b - 1]; val (tb, yb) = pts[b]
+                return if (tb - ta > 0.2) null else ya + (yb - ya) * (tt - ta) / max(1e-6, tb - ta)
+            }
+            val base = listOfNotNull(at(to), at(ld)).takeIf { it.isNotEmpty() }?.average() ?: return true
+            val peak = pts.filter { it.first in to..ld }.minOf { it.second }
+            val riseCm = (base - peak) / k
+            if (riseCm < max(0.45 * hCm, 2.5)) { lastReject = String.format("subida %.1f de %.1f cm", riseCm, hCm); rejections++; return false }
+            // Curva de caída libre: con 4 cuadros o más en el aire, la cabeza debe curvarse como cae un cuerpo
+            // (al menos la mitad de g). Un paso o un trote la mueven unos pocos cm, con mucha menos curvatura.
+            val air = pts.filter { it.first in to..ld }.toMutableList()
+            if (air.size >= MINPTS) {
+                // Ajuste y = c0 + c1·u + c2·u² por mínimos cuadrados (u centrado); se quitan hasta 2 puntos
+                // atípicos (errores del modelo en la cabeza) antes de decidir.
+                fun fit(ps: List<Pair<Double, Double>>): DoubleArray? {
+                    val tm = ps.map { it.first }.average()
+                    var s0 = 0.0; var s1 = 0.0; var s2 = 0.0; var s3 = 0.0; var s4 = 0.0
+                    var y0 = 0.0; var y1 = 0.0; var y2 = 0.0
+                    for ((tt, y) in ps) { val u = tt - tm; val u2 = u * u
+                        s0 += 1; s1 += u; s2 += u2; s3 += u2 * u; s4 += u2 * u2; y0 += y; y1 += u * y; y2 += u2 * y }
+                    val m = arrayOf(doubleArrayOf(s0, s1, s2), doubleArrayOf(s1, s2, s3), doubleArrayOf(s2, s3, s4))
+                    val v = doubleArrayOf(y0, y1, y2)
+                    fun det3(q: Array<DoubleArray>) = q[0][0] * (q[1][1] * q[2][2] - q[1][2] * q[2][1]) -
+                        q[0][1] * (q[1][0] * q[2][2] - q[1][2] * q[2][0]) + q[0][2] * (q[1][0] * q[2][1] - q[1][1] * q[2][0])
+                    val d = det3(m)
+                    if (abs(d) < 1e-18) return null
+                    val out = DoubleArray(4)
+                    for (col in 0..2) {
+                        val q = arrayOf(m[0].clone(), m[1].clone(), m[2].clone())
+                        for (row in 0..2) q[row][col] = v[row]
+                        out[col] = det3(q) / d
+                    }
+                    out[3] = tm
+                    return out
+                }
+                var cf = fit(air)
+                repeat(2) {
+                    val c = cf ?: return@repeat
+                    if (air.size <= MINPTS) return@repeat
+                    val res = air.map { (tt, y) -> val u = tt - c[3]; abs(y - (c[0] + c[1] * u + c[2] * u * u)) }
+                    val w = res.indices.maxByOrNull { res[it] }!!
+                    if (res[w] > maxOf(4.0 * sigma, 2.5 * k)) { air.removeAt(w); cf = fit(air) }
+                }
+                cf?.let { c ->
+                    val gHalfPx = g * 100.0 * k / 2
+                    if (c[2] < CURV * gHalfPx || c[2] > CURVMAX * gHalfPx) { lastReject = String.format("curvatura %.2f g (n=%d)", c[2] / gHalfPx, air.size); rejections++; return false }
+                }
+            }
+            return true
+        }
+
+        fun riseOk(r: Run, one: Rep) = !CHECK_RISE || bodyRiseOk(r, one.takeoffT, one.landingT, one.heightCm)
+
+        fun rep(r: Run, contactS: Double?, check: Boolean = true): Rep? {
             val (tv, to, ld) = flight(r)
             val h = Calc.heightCm(tv)
             if (h < 2.0 || h > 100.0) return null
+            if (check && CHECK_RISE && !bodyRiseOk(r, to, ld, h)) return null
             return Rep(tv, h, contactS, to, ld)
         }
 
@@ -329,15 +410,18 @@ class PoseJumpDetector(private val test: TestType, statureCm: Double?, private v
             TestType.RJ -> {
                 val reps = ArrayList<Rep>()
                 var prevLanding: Double? = null
+                var passed = 0
                 for ((ri, r) in flights) {
                     if (prevLanding == null && reps.isEmpty() && dur(runs[ri - 1]) < minQuietS) continue
-                    val one = rep(r, null) ?: continue
+                    val one = rep(r, null, check = false) ?: continue
+                    if (riseOk(r, one)) passed++
                     val tc = prevLanding?.let { one.takeoffT - it }?.takeIf { it in 0.05..1.0 }
                     reps.add(one.copy(contactS = tc))
                     prevLanding = one.landingT
                 }
                 reportedUntil = endT
-                if (reps.isEmpty()) null else Event.Series(reps)
+                // La serie vale si la mayoría de los vuelos levantan todo el cuerpo (no son pasos ni sentadillas).
+                if (reps.isEmpty() || passed < max(1.0, 0.6 * reps.size)) null else Event.Series(reps)
             }
             TestType.DJ -> {
                 // Caída del cajón: tramo elevado (de pie sobre el cajón y la caída), contacto corto y vuelo.
@@ -383,9 +467,26 @@ class PoseJumpDetector(private val test: TestType, statureCm: Double?, private v
                 reportedUntil = endT
                 // Exige apoyo quieto antes del despegue (descarta pasos o trotes).
                 if (dur(runs[ri - 1]) < minQuietS) return null
-                rep(r, null)?.let { Event.Jump(it) }
+                val one = rep(r, null) ?: return null
+                if (CHECK_RISE && !bentBefore(one.takeoffT, k)) { lastReject = "sin agacharse"; rejections++; return null }
+                Event.Jump(one)
             }
         }
+    }
+
+    /**
+     * CMJ y SJ: antes de despegar el atleta se agacha (contramovimiento o posición de 90°), así que la cabeza
+     * baja al menos 8 cm respecto de cuando estaba de pie. Un paso o un pie que se acomoda casi no la mueve.
+     * Sin datos suficientes de la cabeza no se descarta.
+     */
+    private fun bentBefore(to: Double, k: Double): Boolean {
+        val pre = buf.filter { it.t in (to - 6.0)..(to - 0.03) }.mapNotNull { s -> s.nose?.let { s.t to it } }
+        val near = pre.filter { it.first >= to - 1.2 }.map { it.second }.sorted()
+        if (pre.size < 8 || near.size < 3) return true
+        val all = pre.map { it.second }.sorted()
+        val standing = all[(all.size * 0.1).toInt()]          // de pie: de los más altos (y menor)
+        val low = near[near.size - 2]                            // lo más bajo cerca del despegue (sin el extremo)
+        return (low - standing) / k >= 8.0
     }
 
     /** Sin huecos largos (cuadros sin cuerpo) durante el vuelo. */

@@ -60,6 +60,9 @@ class AiCaptureActivity : BaseActivity() {
     private var box: Double? = null
     private var load: Double? = null
     private var stature: Double? = null
+    /** Aviso de movimiento descartado (no fue un salto) hasta este instante. */
+    private var rejectShownUntil = 0L
+    private var seenRejections = 0
 
     private var setup: Setup? = null
     private lateinit var texture: AutoFitTextureView
@@ -117,6 +120,7 @@ class AiCaptureActivity : BaseActivity() {
         stature = Clients.byName(this, athlete)?.heightCm
         techOn = Technique.enabled(this)
         detector = PoseJumpDetector(test, stature, box)
+        seenRejections = 0
 
         val s = chooseSetup()
         if (s == null) {
@@ -265,6 +269,7 @@ class AiCaptureActivity : BaseActivity() {
                     stature = v
                     Clients.byName(this, athlete)?.let { Clients.save(this, it.copy(heightCm = v)) }
                     detector = PoseJumpDetector(test, v, box)
+                    seenRejections = 0
                 }
             }
             .setNegativeButton("Usar 170 cm", null)
@@ -442,13 +447,16 @@ class AiCaptureActivity : BaseActivity() {
         val right = footOf(PoseLandmark.RIGHT_HEEL, PoseLandmark.RIGHT_FOOT_INDEX)
         val foot = listOfNotNull(left, right).maxOrNull()
         val nose = lm(PoseLandmark.NOSE)?.position?.y?.toDouble()
+        // Cadera (respaldo de la cabeza para comprobar que en el vuelo sube todo el cuerpo).
+        val hip = listOfNotNull(lm(PoseLandmark.LEFT_HIP)?.position?.y, lm(PoseLandmark.RIGHT_HIP)?.position?.y)
+            .takeIf { it.isNotEmpty() }?.average()
 
         if (techOn) {
             val tS = tsNs / 1e9
             techFrames.addLast(Technique.frame(p, tS))
             while (techFrames.isNotEmpty() && tS - techFrames.first().t > 25.0) techFrames.removeFirst()
         }
-        val ev = detector.add(PoseJumpDetector.Sample(tsNs / 1e9, foot, nose))
+        val ev = detector.add(PoseJumpDetector.Sample(tsNs / 1e9, foot, nose, hip))
 
         overlay.update(p, uw, uh, detector.floorPx, detector.state)
         // Con menos de 18 análisis por segundo la medición pierde precisión (pocos cuadros cerca del suelo).
@@ -462,7 +470,12 @@ class AiCaptureActivity : BaseActivity() {
 
         // Indicaciones
         val body = if (foot != null && nose != null) (foot - nose) / uh else null
+        if (detector.rejections != seenRejections) {
+            seenRejections = detector.rejections
+            rejectShownUntil = android.os.SystemClock.elapsedRealtime() + 2500
+        }
         status.text = when {
+            android.os.SystemClock.elapsedRealtime() < rejectShownUntil -> "No se contó: fue un paso o un movimiento, no un salto"
             foot == null || nose == null -> "Que se vea el cuerpo entero, con los pies"
             body != null && body < 0.35 -> "Acércate un poco a la cámara"
             body != null && body > 0.92 -> "Aléjate: la cabeza y los pies deben verse"
@@ -602,6 +615,7 @@ class AiCaptureActivity : BaseActivity() {
             mass = c?.massKg
             stature = c?.heightCm
             detector = PoseJumpDetector(test, stature, box)
+            seenRejections = 0
             techFrames.clear()
         }
         topText.text = topLabel()
