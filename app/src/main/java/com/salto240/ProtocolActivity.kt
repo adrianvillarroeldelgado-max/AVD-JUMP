@@ -20,7 +20,8 @@ class ProtocolActivity : BaseActivity() {
             "Medición con IA (sin cámara lenta)" to listOf(
                 "La IA reconoce el cuerpo del atleta y sigue sus pies en cada cuadro: no hace falta línea del suelo.",
                 "Teléfono en trípode, en vertical, a 2–3 m del atleta y a la altura de la cadera (unos 80–100 cm).",
-                "Cuerpo entero dentro del recuadro, de la cabeza a los pies, con un poco de piso debajo. De frente o de costado.",
+                "Cuerpo entero dentro del recuadro, de la cabeza a los pies, con un poco de piso debajo.",
+                "Mejor en diagonal (unos 45°): se ven los dos pies y las rodillas. De costado exacto un pie tapa al otro; de frente no se ve si aterriza con las rodillas flexionadas.",
                 "Solo el atleta en la imagen: si hay otras personas, la IA puede seguir a la equivocada.",
                 "Ropa que se distinga del fondo y buena luz: a 30–60 fps la imagen debe verse nítida.",
                 "La estatura del cliente debe estar en su ficha: la app la usa para convertir la imagen a centímetros.",
@@ -42,7 +43,7 @@ class ProtocolActivity : BaseActivity() {
             "2. Teléfono" to listOf(
                 "En trípode, en vertical. No debe moverse durante la grabación.",
                 "Cámara baja: a 20–40 cm del piso.",
-                "A 1,5–2,5 m del atleta, de frente o de costado.",
+                "A 1,5–2,5 m del atleta, de costado: así se ve el instante en que la punta del pie deja el suelo y vuelve a tocarlo. De frente también sirve.",
                 "Los dos pies en el centro de la imagen: la app no mira los bordes. La punta del pie debe verse completa.",
                 "Batería cargada y espacio libre (cada video ocupa unos 10–20 MB; se pueden borrar desde Historial › Videos). Cierra otras apps de cámara.",
                 "Deja «En vivo: Sí» para que la medición sea automática."

@@ -32,8 +32,8 @@ class OnboardingActivity : BaseActivity() {
             "Necesita la estatura del atleta.\n\nCámara lenta 240 fps: el teléfono mira los pies y mide cuadro a cuadro. " +
             "Es la opción más precisa (±0,5 cm) si tu teléfono graba en cámara lenta."),
         Page(2, "Coloca el teléfono", "• En trípode, quieto y nivelado (la pantalla muestra el nivel).\n" +
-            "• IA: a 2–3 m, a la altura de la cadera, con el cuerpo entero dentro del recuadro.\n" +
-            "• 240 fps: a 1,5–2,5 m y a 20–40 cm del piso; arrastra la línea naranja hasta donde apoyan los pies.\n" +
+            "• 240 fps: de costado, a 1,5–2,5 m y a 20–40 cm del piso; arrastra la línea naranja hasta donde apoyan los pies.\n" +
+            "• IA: en diagonal (unos 45°), a 2–3 m y a la altura de la cadera, con el cuerpo entero dentro del recuadro.\n" +
             "• Buena luz y fondo que contraste con las zapatillas."),
         Page(3, "Salta bien para medir bien", "• Quieto 1 s antes de saltar.\n• Manos en la cadera en CMJ y SJ.\n" +
             "• Aterrizar en el mismo sitio con las piernas extendidas: si encoge las rodillas, la app avisa porque la altura sale inflada.\n" +

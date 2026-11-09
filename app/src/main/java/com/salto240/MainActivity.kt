@@ -198,8 +198,9 @@ class MainActivity : BaseActivity() {
         val pTips = panel()
         pTips.addView(caption("Cómo grabar"))
         pTips.addView(text(
-            "• Teléfono en trípode, a 1,5–2,5 m y a 20–40 cm del piso.\n" +
+            "• 240 fps: teléfono en trípode, de costado, a 1,5–2,5 m y a 20–40 cm del piso.\n" +
             "• Línea naranja justo donde la suela toca el piso.\n" +
+            "• IA: en diagonal (unos 45°), a 2–3 m, con el cuerpo entero en el recuadro.\n" +
             "• Quieto 1–2 s, saltar, aterrizar en el mismo sitio con piernas extendidas y quedarse quieto 1 s.",
             14f, Col.INK
         ))

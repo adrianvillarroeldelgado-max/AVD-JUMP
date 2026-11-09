@@ -238,9 +238,9 @@ class AiCaptureActivity : BaseActivity() {
     }
 
     private fun hint() = when {
-        test.isDrop -> "Cuerpo entero dentro del recuadro. Primero quieto en el suelo 1 s, luego sube al cajón, déjate caer y rebota."
-        test.isRepeated -> "Cuerpo entero dentro del recuadro. Quieto 1 s, salta seguido y al terminar quédate quieto 2 s."
-        else -> "Cuerpo entero dentro del recuadro. Quieto 1 s, salta y quédate quieto al aterrizar. Puedes saltar las veces que quieras."
+        test.isDrop -> "Cuerpo entero dentro del recuadro, en diagonal (unos 45°). Primero quieto en el suelo 1 s, luego sube al cajón, déjate caer y rebota."
+        test.isRepeated -> "Cuerpo entero dentro del recuadro, en diagonal (unos 45°). Quieto 1 s, salta seguido y al terminar quédate quieto 2 s."
+        else -> "Cuerpo entero dentro del recuadro, en diagonal (unos 45°). Quieto 1 s, salta y quédate quieto al aterrizar. Puedes saltar las veces que quieras."
     }
 
     private fun saveLabel(): String {
