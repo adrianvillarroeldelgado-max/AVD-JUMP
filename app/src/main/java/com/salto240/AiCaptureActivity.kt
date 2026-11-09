@@ -514,7 +514,10 @@ class AiCaptureActivity : BaseActivity() {
             Technique.around(fr, first.landingT, 0.05, 0.035))
     }
 
-    private fun addItem(reps: List<PoseJumpDetector.Rep>) {
+    private fun addItem(reps0: List<PoseJumpDetector.Rep>) {
+        // Calibración del método IA (Validación): la altura que se ve y se dice ya va corregida; al guardar se corrige igual.
+        val cal = if (test.isRepeated) null else Validation.calibration(this, "ia")
+        val reps = if (cal == null) reps0 else reps0.map { it.copy(heightCm = (cal.apply(it.heightCm) * 10).roundToInt() / 10.0) }
         val flags = techFlags(reps)
         items.add(Item(reps, flags))
         val first = reps.first()
@@ -528,6 +531,7 @@ class AiCaptureActivity : BaseActivity() {
             bigResult.text = fmt("%.1f cm", first.heightCm)
             val sb = StringBuilder(fmt("Vuelo %.0f ms · despegue %.2f m/s", first.flightS * 1000, Calc.takeoffVelocity(first.flightS)))
             first.contactS?.let { sb.append(fmt(" · contacto %.0f ms · RSI %.2f", it * 1000, Calc.rsi(first.heightCm, it))) }
+            first.tttS?.let { sb.append(fmt("\nRSI modificado %.2f · tiempo hasta el despegue %.2f s", first.heightCm / 100.0 / it, it)) }
             detail.text = sb.toString()
         }
         if (flags.isNotEmpty()) detail.append("\n⚠ " + flags.joinToString("\n⚠ "))
@@ -649,7 +653,8 @@ class AiCaptureActivity : BaseActivity() {
 
     private fun buildJump(rep: PoseJumpDetector.Rep, flags: List<String> = emptyList()): Jump? =
         JumpCalc.fromFlight(test, athlete, rep.flightS, rep.contactS, mass, box, load, fpsInt(), footer())
-            ?.jump?.copy(notes = "IA en vivo", flags = flags)
+            ?.jump?.let { j -> j.copy(notes = "IA en vivo", flags = flags, method = "ia",
+                tttMs = rep.tttS?.let { it * 1000 }, rsiMod = rep.tttS?.let { j.heightCm / 100.0 / it }) }
 
     private fun save() {
         cancelAutoSave()
@@ -671,7 +676,7 @@ class AiCaptureActivity : BaseActivity() {
                 val contacts = it.reps.drop(1).map { r -> r.contactS }
                 JumpCalc.repeated(athlete, it.reps.map { r -> r.flightS },
                     if (contacts.all { c -> c != null }) contacts.filterNotNull() else emptyList(), mass, fpsInt(), test)
-                    ?.copy(notes = "IA en vivo", flags = it.flags)
+                    ?.copy(notes = "IA en vivo", flags = it.flags, method = "ia")
             } else buildJump(it.reps.first(), it.flags)
             j?.let { x -> saved.add(x.copy(id = base + i)) }
         }

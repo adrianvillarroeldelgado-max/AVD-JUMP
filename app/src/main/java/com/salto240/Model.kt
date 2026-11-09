@@ -58,7 +58,12 @@ data class Jump(
     val fatiguePct: Double? = null,           // RJ: caída de altura, primeros 3 vs últimos 3
     val video: String? = null,                // video de la evaluación (file:// propio o content:// de la galería)
     val marks: List<Int> = emptyList(),       // cuadros marcados: [despegue, aterrizaje], DJ [contacto, despegue, aterrizaje], RJ todos
-    val flags: List<String> = emptyList()     // avisos de técnica (p. ej. rodillas flexionadas al aterrizar)
+    val flags: List<String> = emptyList(),    // avisos de técnica (p. ej. rodillas flexionadas al aterrizar)
+    val method: String? = null,               // "240" cámara lenta, "ia" IA en vivo, "video" análisis de video, "acc" acelerómetro
+    val confidence: Int? = null,              // confianza de la detección automática (0–100)
+    val tttMs: Double? = null,                // tiempo desde el inicio del contramovimiento hasta el despegue
+    val rsiMod: Double? = null,               // RSI modificado = altura (m) / tiempo hasta el despegue (s)
+    val extra: Map<String, Double> = emptyMap() // métricas adicionales (curva fuerza-tiempo, corrección…)
 ) {
     val day: String get() = date.take(10)
 
@@ -77,6 +82,11 @@ data class Jump(
         video?.let { put("video", it) }
         if (marks.isNotEmpty()) put("marks", JSONArray(marks))
         if (flags.isNotEmpty()) put("flags", JSONArray(flags))
+        method?.let { put("method", it) }
+        confidence?.let { put("confidence", it) }
+        tttMs?.let { put("tttMs", it) }
+        rsiMod?.let { put("rsiMod", it) }
+        if (extra.isNotEmpty()) put("extra", JSONObject().apply { extra.forEach { (k, v) -> put(k, v) } })
     }
 
     companion object {
@@ -106,7 +116,12 @@ data class Jump(
             fatiguePct = o.optD("fatiguePct"),
             video = if (o.has("video")) o.optString("video") else null,
             marks = o.optJSONArray("marks")?.let { a -> (0 until a.length()).map { a.optInt(it) } } ?: emptyList(),
-            flags = o.optJSONArray("flags")?.let { a -> (0 until a.length()).map { a.optString(it) } } ?: emptyList()
+            flags = o.optJSONArray("flags")?.let { a -> (0 until a.length()).map { a.optString(it) } } ?: emptyList(),
+            method = if (o.has("method")) o.optString("method") else null,
+            confidence = if (o.has("confidence")) o.optInt("confidence") else null,
+            tttMs = o.optD("tttMs"),
+            rsiMod = o.optD("rsiMod"),
+            extra = o.optJSONObject("extra")?.let { e -> e.keys().asSequence().associateWith { e.optDouble(it) } } ?: emptyMap()
         )
     }
 }
@@ -189,7 +204,8 @@ object Store {
         ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY, arr.toString()).apply()
     }
 
-    fun add(ctx: Context, j: Jump) {
+    fun add(ctx: Context, j0: Jump) {
+        val j = Validation.calibrate(ctx, j0)
         val list = all(ctx)
         list.add(0, j)
         save(ctx, list)
@@ -213,7 +229,8 @@ object Store {
     }
 
     /** Reemplaza un salto ya guardado (misma id), por ejemplo al volver a medirlo a mano. */
-    fun update(ctx: Context, j: Jump) {
+    fun update(ctx: Context, j0: Jump) {
+        val j = Validation.calibrate(ctx, j0)
         save(ctx, all(ctx).map { if (it.id == j.id) j else it })
     }
 

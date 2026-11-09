@@ -253,13 +253,26 @@ class HistoryActivity : BaseActivity() {
                 if (j.reps.isNotEmpty()) extra += String.format(Locale.getDefault(), " · %d saltos", j.reps.size)
                 j.fatiguePct?.let { extra += String.format(Locale.getDefault(), " · caída %.1f %%", it) }
                 if (j.video != null) extra += " · video"
-                if (j.flags.isNotEmpty()) extra += " · ⚠ " + j.flags.joinToString(" ") { f -> if (f == Technique.MSG_KNEES) "rodillas" else if (f == Technique.MSG_HANDS) "manos" else f }
+                if (j.flags.isNotEmpty()) extra += " · ⚠ " + j.flags.joinToString(" ") { f -> when (f) { Technique.MSG_KNEES -> "rodillas"; Technique.MSG_HANDS -> "manos"; Confidence.FLAG_LOW -> "confianza baja"; else -> f } }
+                j.rsiMod?.let { extra += String.format(Locale.getDefault(), " · RSImod %.2f", it) }
+                if (j.method == "acc") {
+                    j.extra["peakForceBW"]?.let { extra += String.format(Locale.getDefault(), " · F pico %.1f× peso", it) }
+                    val pw = j.extra["peakPowerW"]; val mk = j.massKg
+                    if (pw != null && mk != null && mk > 0) extra += String.format(Locale.getDefault(), " · P pico %.0f W/kg", pw / mk)
+                }
+                if (j.extra.containsKey("revisado")) extra += " · revisado"
+                if (j.extra.containsKey("cal")) extra += " · calibrado"
+                methodLabel(j.method)?.let { extra += " · $it" + (j.confidence?.let { c -> " (confianza ${Confidence.label(c)})" } ?: "") }
                 t2.text = String.format(Locale.getDefault(), "%s · %s · TV %.0f ms%s%s",
                     j.date, j.athlete, j.flightMs, extra, if (j.notes.isNotEmpty()) " · " + j.notes else "")
                 t2.setTextColor(Col.MUTED)
                 return v
             }
         }
+    }
+
+    private fun methodLabel(m: String?) = when (m) {
+        "240" -> "240 fps"; "ia" -> "IA"; "video" -> "video"; "acc" -> "acelerómetro"; else -> null
     }
 
     private fun shareCsv() {

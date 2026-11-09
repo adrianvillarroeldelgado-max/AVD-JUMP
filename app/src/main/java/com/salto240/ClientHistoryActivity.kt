@@ -88,6 +88,9 @@ class ClientHistoryActivity : BaseActivity() {
             "\n${evals.size} evaluaciones · ${evals.sumOf { it.jumps.size }} saltos" +
             (Readiness.of(Store.ofAthlete(this, name))?.let { r ->
                 "\nDisposición " + Evaluations.pretty(r.day) + ": " + r.light.label + " · " + r.line()
+            } ?: "") +
+            (Wellness.entries(this, name).lastOrNull()?.let { e ->
+                "\nBienestar " + Evaluations.pretty(e.day) + ": " + (Wellness.status(this, name, e.day)?.light?.label ?: "") + " · " + e.line()
             } ?: "")
 
         // Solo los indicadores que tienen datos; primero el que más se repite.

@@ -881,3 +881,233 @@ Primero quieto en el suelo 1 s, luego sube al cajón, déjate caer y rebota.	Pri
 Análisis:	Análise:
 (decodificador rápido)	(decodificador rápido)
 fps con fracción de cuadro (±	fps com fração de quadro (±
+
+# 1.6.13: confianza, revisión, validación, RSI mod, bienestar, compartir, acelerómetro
+Poco contraste entre el calzado y el suelo	Pouco contraste entre o calçado e o chão
+poco contraste entre el calzado y el suelo	pouco contraste entre o calçado e o chão
+La suela no se distingue bien del suelo	A sola não se distingue bem do chão
+la suela no se distingue bien del suelo	a sola não se distingue bem do chão
+Algo se movió en la franja del suelo durante el vuelo	Algo se moveu na faixa do chão durante o voo
+algo se movió en la franja del suelo durante el vuelo	algo se moveu na faixa do chão durante o voo
+El contacto aparece y desaparece durante el vuelo	O contato aparece e desaparece durante o voo
+el contacto aparece y desaparece durante el vuelo	o contato aparece e desaparece durante o voo
+Altura poco habitual	Altura pouco habitual
+altura poco habitual	altura pouco habitual
+Despegue o aterrizaje poco nítidos	Decolagem ou aterrissagem pouco nítidas
+despegue o aterrizaje poco nítidos	decolagem ou aterrissagem pouco nítidas
+Hay más de un vuelo posible en el video	Há mais de um voo possível no vídeo
+hay más de un vuelo posible en el video	há mais de um voo possível no vídeo
+El atleta no estuvo quieto antes de saltar	O atleta não ficou parado antes de saltar
+el atleta no estuvo quieto antes de saltar	o atleta não ficou parado antes de saltar
+re:Confianza alta	Confiança alta
+re:Confianza media	Confiança média
+re:Confianza baja	Confiança baixa
+re:confianza alta	confiança alta
+re:confianza media	confiança média
+re:confianza baja	confiança baixa
+Confianza baja de la detección automática: revisa el despegue y el aterrizaje	Confiança baixa na detecção automática: revise a decolagem e a aterrissagem
+. Confianza baja: conviene revisarlo.	. Confiança baixa: convém revisar.
+Revisar cuadro a cuadro (recomendado)	Revisar quadro a quadro (recomendado)
+Corregido por calibración (medido	Corrigido pela calibração (medido
+Marcas corregidas a mano	Marcas corrigidas à mão
+confianza	confiança
+revisado	revisado
+calibrado	calibrado
+Pies	Pés
+◀ Marca anterior	◀ Marca anterior
+Marca siguiente ▶	Próxima marca ▶
+Ir a despegue	Ir à decolagem
+Ir a aterrizaje	Ir à aterrissagem
+Ir a contacto	Ir ao contato
+Aún no hay marca de despegue.	Ainda não há marca de decolagem.
+Aún no hay marca de aterrizaje.	Ainda não há marca de aterrissagem.
+Aún no hay marca de contacto.	Ainda não há marca de contato.
+Despegue: primer cuadro con los pies en el aire. Aterrizaje: primer cuadro en que el pie toca el suelo. Contacto (Drop Jump): primer cuadro en que toca el suelo tras caer.	Decolagem: primeiro quadro com os pés no ar. Aterrissagem: primeiro quadro em que o pé toca o chão. Contato (Drop Jump): primeiro quadro em que toca o chão após a queda.
+DESPEGUE	DECOLAGEM
+ATERRIZAJE	ATERRISSAGEM
+CONTACTO	CONTATO
+Toca los pies en el video (con 1×) o pulsa Auto para indicar el suelo.	Toque nos pés no vídeo (em 1×) ou pressione Auto para indicar o chão.
+RSI modificado	RSI modificado
+RSI modificado (CMJ)	RSI modificado (CMJ)
+tiempo hasta el despegue	tempo até a decolagem
+Tiempo hasta despegue (ms)	Tempo até a decolagem (ms)
+Tiempo hasta despegue	Tempo até a decolagem
+Método	Método
+Confianza	Confiança
+acelerómetro	acelerômetro
+Acelerómetro	Acelerômetro
+Sin método	Sem método
+F pico	F pico
+P pico	P pico
+× peso	× peso
+Curva de fuerza con acelerómetro (experimental)	Curva de força com acelerômetro (experimental)
+Curva de fuerza con acelerómetro	Curva de força com acelerômetro
+Cuestionario de bienestar del cliente	Questionário de bem-estar do cliente
+Validación y calibración	Validação e calibração
+Bienestar	Bem-estar
+Bienestar del día	Bem-estar do dia
+Bienestar de hoy	Bem-estar de hoje
+Cuestionario de bienestar	Questionário de bem-estar
+Cambiar bienestar de hoy	Alterar bem-estar de hoje
+sin medir hoy	sem medir hoje
+sin cuestionario de bienestar.	sem questionário de bem-estar.
+Se toma el peor de los dos: el bienestar.	Usa-se o pior dos dois: o bem-estar.
+Se toma el peor de los dos: el salto.	Usa-se o pior dos dois: o salto.
+Bienestar: sueño, fatiga, estrés y dolor muscular de 1 a 5 (5 es lo mejor). Amarillo si alguno es 1 o 2 o el total está más de 1 desviación bajo su media; 	Bem-estar: sono, fadiga, estresse e dor muscular de 1 a 5 (5 é o melhor). Amarelo se algum for 1 ou 2 ou o total estiver mais de 1 desvio abaixo da média; 
+rojo si está 2 desviaciones por debajo o el total es 9 o menos. El color de cada atleta es el peor entre el salto y el bienestar.	vermelho se estiver 2 desvios abaixo ou o total for 9 ou menos. A cor de cada atleta é a pior entre o salto e o bem-estar.
+Calidad del sueño	Qualidade do sono
+Muy mala	Muito ruim
+Muy buena	Muito boa
+Muy cansado	Muito cansado
+Nada cansado	Nada cansado
+Estrés	Estresse
+Muy estresado	Muito estressado
+Nada estresado	Nada estressado
+Dolor muscular	Dor muscular
+Mucho dolor	Muita dor
+Sin dolor	Sem dor
+Sueño	Sono
+Dolor	Dor
+re:· total (\d+)/20	· total $1/20
+Bienestar dentro de lo habitual.	Bem-estar dentro do habitual.
+Bienestar muy por debajo de su media.	Bem-estar muito abaixo da média.
+Bienestar por debajo de su media.	Bem-estar abaixo da média.
+Bienestar muy bajo (total	Bem-estar muito baixo (total
+Valor bajo en:	Valor baixo em:
+Bajo en:	Baixo em:
+calidad del sueño	qualidade do sono
+dolor muscular	dor muscular
+5 es lo mejor en todas. Responde cómo se siente ahora, antes de entrenar.	5 é o melhor em todas. Responda como se sente agora, antes de treinar.
+Responde las 4 preguntas.	Responda às 4 perguntas.
+Bienestar: 	Bem-estar: 
+EXPERIMENTAL	EXPERIMENTAL
+Sujeta el teléfono firme a la cintura: cinturón elástico o riñonera, en la espalda baja o sobre el ombligo, 	Prenda o telefone firme na cintura: cinto elástico ou pochete, na lombar ou sobre o umbigo, 
+sin que baile. Manos en la cadera (salvo CMJ con brazos). Pulsa Empezar, quédate quieto 2 s y salta al oír «¡Salta!». 	sem balançar. Mãos na cintura (exceto CMJ com braços). Pressione Começar, fique parado 2 s e salte ao ouvir «Salte!». 
+Aterriza y quédate quieto 1 s.	Aterrisse e fique parado 1 s.
+Este teléfono no tiene acelerómetro.	Este telefone não tem acelerômetro.
+Naranja: fuerza (veces el peso). Azul: velocidad. Fondo: descarga (amarillo), frenado (rojo), impulso (verde), vuelo (gris).	Laranja: força (vezes o peso). Azul: velocidade. Fundo: descarga (amarelo), frenagem (vermelho), propulsão (verde), voo (cinza).
+Cómo se calcula: la fuerza sale de la aceleración del teléfono (F = m·a), la velocidad de integrarla y la altura 	Como se calcula: a força vem da aceleração do telefone (F = m·a), a velocidade de integrá-la e a altura 
+del tiempo de vuelo (como en los otros métodos). Es una estimación: el teléfono se mueve algo respecto del cuerpo y el 	do tempo de voo (como nos outros métodos). É uma estimativa: o telefone se move um pouco em relação ao corpo e o 
+sensor de muchos teléfonos mide a 100–400 muestras por segundo, frente a 1000 de una plataforma de fuerza. 	sensor de muitos telefones mede a 100–400 amostras por segundo, contra 1000 de uma plataforma de força. 
+Úsalo para comparar al mismo atleta con el mismo teléfono y la misma sujeción. Valídalo en Validación y calibración.	Use para comparar o mesmo atleta com o mesmo telefone e a mesma fixação. Valide em Validação e calibração.
+Escribe la masa del atleta (kg).	Escreva a massa do atleta (kg).
+No hubo 2 s quieto. Sujeta bien el teléfono y vuelve a empezar.	Não houve 2 s parado. Prenda bem o telefone e comece de novo.
+No se pudo analizar:	Não foi possível analisar:
+Medido	Medido
+muestras/s	amostras/s
+Altura por impulso	Altura por impulso
+Descarga · frenado	Descarga · frenagem
+Contramovimiento	Contramovimento
+RFD excéntrico	RFD excêntrica
+Impulso de frenado	Impulso de frenagem
+Impulso (propulsión)	Impulso (propulsão)
+Fuerza pico	Força pico
+Fuerza media impulso	Força média de propulsão
+Potencia pico	Potência pico
+Pico al aterrizar	Pico na aterrissagem
+Acelerómetro (experimental)	Acelerômetro (experimental)
+Se detuvo al salir de la pantalla.	Parou ao sair da tela.
+Hubo movimiento durante el reposo. Quédate quieto 2 s antes de saltar.	Houve movimento durante o repouso. Fique parado 2 s antes de saltar.
+El acelerómetro da solo	O acelerômetro dá apenas
+muestras por segundo; hacen falta 100 o más.	amostras por segundo; são necessárias 100 ou mais.
+No se encontró el vuelo. Sujeta bien el teléfono a la cintura y salta.	O voo não foi encontrado. Prenda bem o telefone na cintura e salte.
+El salto empezó demasiado pronto: quédate quieto hasta oír «¡Salta!».	O salto começou cedo demais: fique parado até ouvir «Salte!».
+La grabación terminó antes del aterrizaje.	A gravação terminou antes da aterrissagem.
+Vuelo fuera de rango	Voo fora do intervalo
+No se ve bien el inicio del movimiento.	O início do movimento não é claro.
+La altura por impulso	A altura por impulso
+no coincide con la del vuelo: el teléfono pudo moverse en la cintura.	não coincide com a do voo: o telefone pode ter se movido na cintura.
+Acelerómetro a	Acelerômetro a
+muestras/s: los tiempos tienen más error.	amostras/s: os tempos têm mais erro.
+Quieto	Parado
+Listo.	Pronto.
+Medido ·	Medido ·
+Analizar en AVD jump	Analisar no AVD jump
+No llegó ningún video.	Nenhum vídeo foi recebido.
+Analizar video compartido	Analisar vídeo compartilhado
+Copiando el video…	Copiando o vídeo…
+Altura del cajón en Drop Jump (cm)	Altura da caixa no Drop Jump (cm)
+En el análisis se pregunta a cuántos fps se grabó y luego se toca el suelo donde apoya la suela: 	Na análise pergunta-se a quantos fps foi gravado e depois toca-se o chão onde apoia a sola: 
+la app marca el despegue y el aterrizaje sola.	o app marca a decolagem e a aterrissagem sozinho.
+WhatsApp y otras apps de mensajes suelen comprimir el video y bajarlo a 30 fps. Para medir con cámara lenta, 	WhatsApp e outros apps de mensagens costumam comprimir o vídeo e reduzi-lo a 30 fps. Para medir em câmera lenta, 
+comparte el archivo original desde la galería o envíalo como documento.	compartilhe o arquivo original da galeria ou envie como documento.
+No se pudo leer el video compartido.	Não foi possível ler o vídeo compartilhado.
+Video listo	Vídeo pronto
+cuadros/s en el archivo	quadros/s no arquivo
+Analizar	Analisar
+Plataforma de fuerza	Plataforma de força
+Otra app o sistema	Outro app ou sistema
+Pares:	Pares:
+Sesgo (AVD − referencia):	Viés (AVD − referência):
+DE de las diferencias:	DP das diferenças:
+Límites de acuerdo 95 %:	Limites de concordância 95 %:
+Error típico:	Erro típico:
+Correlación r:	Correlação r:
+Regresión: referencia =	Regressão: referência =
+× AVD	× AVD
+cm (error	cm (erro
+Sesgo proporcional: pendiente	Viés proporcional: inclinação
+la diferencia cambia con la altura: conviene la corrección lineal	a diferença muda com a altura: convém a correção linear
+excelente	excelente
+moderada	moderada
+altura = medida	altura = medida
+× medida	× medida
+altura =	altura =
+pares,	pares,
+Faltan pares para el gráfico	Faltam pares para o gráfico
+AVD jump (cm)	AVD jump (cm)
+Media de los dos (cm)	Média dos dois (cm)
+Mide los mismos saltos con AVD jump y con un instrumento de referencia (plataforma de fuerza, My Jump Lab u otro). 	Meça os mesmos saltos com o AVD jump e com um instrumento de referência (plataforma de força, My Jump Lab ou outro). 
+Con 15–30 pares se ve cuánto se parecen (Bland-Altman) y, si quieres, se corrige la diferencia.	Com 15–30 pares vê-se o quanto concordam (Bland-Altman) e, se quiser, corrige-se a diferença.
+Método de AVD jump	Método do AVD jump
+Todos los métodos	Todos os métodos
+Añadir par de un salto	Adicionar par de um salto
+Pegar lista	Colar lista
+Mide un salto con AVD jump mientras la referencia mide el mismo salto. Luego elige el salto aquí y escribe el valor de la referencia.	Meça um salto com o AVD jump enquanto a referência mede o mesmo salto. Depois escolha o salto aqui e escreva o valor da referência.
+Acuerdo	Concordância
+AVD vs referencia	AVD vs referência
+Línea naranja: sesgo. Líneas punteadas: límites de acuerdo (95 % de las diferencias). 	Linha laranja: viés. Linhas pontilhadas: limites de concordância (95 % das diferenças). 
+En la dispersión, la punteada es la igualdad y la naranja la regresión.	Na dispersão, a pontilhada é a igualdade e a laranja a regressão.
+Compartir datos y resultados	Compartilhar dados e resultados
+Pares (mantén pulsado para borrar)	Pares (mantenha pressionado para apagar)
+Hacen falta al menos 3 pares (recomendado 15–30).	São necessários pelo menos 3 pares (recomendado 15–30).
+Todavía no hay pares.	Ainda não há pares.
+ref.	ref.
+dif.	dif.
+¿Borrar este par?	Apagar este par?
+Calibración (opcional)	Calibração (opcional)
+Elige un método arriba: la corrección se guarda por método.	Escolha um método acima: a correção é guardada por método.
+Sin corrección: se guarda la altura medida.	Sem correção: guarda-se a altura medida.
+Activa:	Ativa:
+Corregir solo el sesgo	Corrigir só o viés
+Corrección lineal	Correção linear
+Con menos de 20 pares conviene corregir solo el sesgo. La corrección lineal hace falta si hay sesgo proporcional.	Com menos de 20 pares convém corrigir só o viés. A correção linear é necessária se houver viés proporcional.
+Con 5 pares o más se puede corregir el sesgo; con 10 o más, también la pendiente.	Com 5 pares ou mais pode-se corrigir o viés; com 10 ou mais, também a inclinação.
+Quitar la corrección	Remover a correção
+La corrección se aplica a los saltos nuevos de ese método (no a los saltos repetidos). 	A correção se aplica aos saltos novos desse método (não aos saltos repetidos). 
+Se guarda la altura original y la corregida. Vale solo para este teléfono y esta forma de grabar.	Guarda-se a altura original e a corrigida. Vale só para este telefone e esta forma de gravar.
+Aplicar corrección a	Aplicar correção a
+Ejemplo: 30,0 cm medidos →	Exemplo: 30,0 cm medidos →
+40,0 cm medidos →	40,0 cm medidos →
+No hay saltos simples guardados	Não há saltos simples guardados
+con ese método.	com esse método.
+Elige el salto	Escolha o salto
+Escribir valores	Escrever valores
+Altura de la referencia (cm)	Altura da referência (cm)
+Valor de la referencia	Valor da referência
+Escribe la altura de la referencia.	Escreva a altura da referência.
+Altura de AVD jump sin corregir (cm)	Altura do AVD jump sem correção (cm)
+Par escrito a mano	Par escrito à mão
+Faltan valores.	Faltam valores.
+Una línea por salto: altura de AVD jump y de la referencia, separadas por espacio, ; o tabulador. Se puede pegar desde Excel.	Uma linha por salto: altura do AVD jump e da referência, separadas por espaço, ; ou tabulação. Pode-se colar do Excel.
+Pegar lista de pares	Colar lista de pares
+Añadir	Adicionar
+pares añadidos.	pares adicionados.
+Validación AVD jump	Validação AVD jump
+todos los métodos	todos os métodos
+Validación	Validação
+Aplicar	Aplicar
+re:\bSueño (\d)	Sono $1
+re:\bFatiga (\d)	Fadiga $1
+re:\bEstrés (\d)	Estresse $1
+re:\bDolor (\d)	Dor $1

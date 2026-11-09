@@ -597,6 +597,8 @@ class CaptureActivity : BaseActivity() {
             // Fracción de cuadro: el análisis la usa mientras no se muevan esas marcas.
             i.putExtra(AnalysisActivity.EX_PRESET_SUB, doubleArrayOf(r.takeoffSub ?: Double.NaN, r.landingSub ?: Double.NaN, r.contactSub ?: Double.NaN))
             if (r.eventsSub.size == r.events.size && r.events.isNotEmpty()) i.putExtra(AnalysisActivity.EX_PRESET_EVENTS_SUB, r.eventsSub.toDoubleArray())
+            r.confidence?.let { i.putExtra(AnalysisActivity.EX_PRESET_CONF, it) }
+            i.putExtra(AnalysisActivity.EX_PRESET_REASONS, r.reasons.toTypedArray())
         }
         return i
     }
@@ -900,7 +902,7 @@ class CaptureActivity : BaseActivity() {
             ?: Store.athlete(this, athleteName()).massKg
         val box = intent.getDoubleExtra(MainActivity.EX_BOX, 0.0).takeIf { it > 0 }
         val load = if (test == TestType.SJ || test == TestType.CMJ) intent.getDoubleExtra(MainActivity.EX_LOAD, 0.0) else null
-        val out = when {
+        val out0 = when {
             test.isRepeated -> r?.let { rr -> rr.eventsSub.takeIf { it.size == rr.events.size && it.size >= 2 } ?: rr.events.map { it.toDouble() } }
                 ?.takeIf { it.size >= 2 }?.let { ev ->
                 // Serie de saltos (sesión de grupo): vuelos y contactos desde las marcas.
@@ -918,6 +920,13 @@ class CaptureActivity : BaseActivity() {
             else -> null
         }
 
+        // Calibración del método (Validación): se muestra y se guarda ya corregida.
+        val out = out0?.let { o ->
+            val cj = Validation.calibrate(this, o.jump.copy(method = "240"))
+            if (cj.extra.containsKey("cal"))
+                JumpCalc.Out(cj, fmt("Corregido por calibración (medido %.1f cm)\n", o.jump.heightCm) + o.detail)
+            else o
+        }
         cardButtons.removeAllViews()
         cardPrimary = null
         recBtn.isEnabled = true
@@ -944,17 +953,23 @@ class CaptureActivity : BaseActivity() {
             "Definitivo a $fps fps · difiere de la vista previa: conviene revisarlo"
         else "Definitivo · ${test.short} · ${athleteName()}"
         info.text = "Salto medido."
-        val warn = (listOfNotNull(fpsNote) + flags).joinToString("") { "\n⚠ $it" }
+        val conf = r?.confidence
+        val lowConf = Confidence.level(conf) == 0
+        val flags = if (lowConf) flags + Confidence.FLAG_LOW else flags
+        val warn = (listOfNotNull(fpsNote) + flags.filter { it != Confidence.FLAG_LOW }).joinToString("") { "\n⚠ $it" }
+        val confTxt = Confidence.line(conf, r?.reasons ?: emptyList())?.let { "\n" + (if (Confidence.level(conf) < 2) "⚠ " else "✓ ") + it } ?: ""
         val bigTxt = if (test.isRepeated && out.jump.rsi != null) fmt("RSI %.2f", out.jump.rsi) else fmt("%.1f cm", out.jump.heightCm)
         val speed = fmt("\nAnálisis: %.1f s", analysisMs / 1000.0) + if (analysisFast) " (decodificador rápido)" else ""
-        showCard(status, bigTxt, if (flags.isEmpty()) 0xFFFFFFFF.toInt() else 0xFFFFC04D.toInt(), out.detail + speed + warn)
+        showCard(status, bigTxt, when { lowConf -> Confidence.color(conf); flags.isEmpty() -> 0xFFFFFFFF.toInt(); else -> 0xFFFFC04D.toInt() },
+            out.detail + confTxt + speed + warn)
         // Resultado en voz alta y en grande.
         val said = when {
             test.isRepeated && out.jump.rsi != null -> "RSI " + Voice.num(this, out.jump.rsi, 2)
             test.isDrop && out.jump.rsi != null -> Voice.num(this, out.jump.heightCm) + " centímetros. RSI " + Voice.num(this, out.jump.rsi, 2)
             else -> Voice.num(this, out.jump.heightCm) + " centímetros"
         }
-        speak("${athleteName()}, $said" + if (flags.contains(Technique.MSG_KNEES)) ". Atención: rodillas flexionadas al aterrizar." else "")
+        speak("${athleteName()}, $said" + (if (flags.contains(Technique.MSG_KNEES)) ". Atención: rodillas flexionadas al aterrizar." else "") +
+            if (lowConf) ". Confianza baja: conviene revisarlo." else "")
         BigResult.show(rootFrame, athleteName(), bigTxt, out.detail.lineSequence().firstOrNull() ?: "",
             if (flags.isEmpty()) 0xFFFFFFFF.toInt() else 0xFFFFC04D.toInt())
 
@@ -968,7 +983,8 @@ class CaptureActivity : BaseActivity() {
                 test.isDrop -> listOfNotNull(r?.contact, r?.takeoff, r?.landing).takeIf { it.size == 3 }
                 else -> listOfNotNull(r?.takeoff, r?.landing).takeIf { it.size == 2 }
             }
-            val saved = out.jump.copy(video = if (keep) Uri.fromFile(f).toString() else null, marks = mk ?: emptyList(), flags = flags)
+            val saved = out.jump.copy(video = if (keep) Uri.fromFile(f).toString() else null, marks = mk ?: emptyList(), flags = flags,
+                method = "240", confidence = r?.confidence)
             Store.add(this, saved)
             val note = listOfNotNull(JumpCalc.asymmetryNote(this, saved), Attempts.afterSave(this, saved)).joinToString("\n").ifEmpty { null }
             Tst.makeText(this, fmt("Guardado: %.1f cm", saved.heightCm) + (if (keep) " · con video" else "") +
@@ -976,17 +992,23 @@ class CaptureActivity : BaseActivity() {
             if (!keep) f.delete()
             nextTurn()
         }
-        val saveBtn = button(if (groupMode) "Guardar y siguiente atleta" else "Guardar y siguiente", true) { doSave() }
+        val saveBtn = button(if (groupMode) "Guardar y siguiente atleta" else "Guardar y siguiente", !lowConf) { doSave() }
+        if (lowConf) {
+            // Con confianza baja lo primero es revisar; guardar sigue disponible.
+            val rev = button("Revisar cuadro a cuadro (recomendado)", true) { cancelAutoSave(); startActivity(analysisIntent(f, fps, r)); finish() }
+            cardButtons.addView(rev, lp())
+        }
         cardButtons.addView(saveBtn, lp())
         cardPrimary = saveBtn
         val row = hbox(8)
-        row.addView(button("Revisar") { cancelAutoSave(); startActivity(analysisIntent(f, fps, r)); finish() },
+        if (!lowConf) row.addView(button("Revisar") { cancelAutoSave(); startActivity(analysisIntent(f, fps, r)); finish() },
             lp(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
         row.addView(button("Repetir") { cancelAutoSave(); f.delete(); restartLive(null) },
             lp(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
         cardButtons.addView(row, lp())
         // En la sesión de grupo se guarda solo a los 4 s, salvo que se pulse Repetir o Revisar.
-        if (groupMode) startAutoSave(saveBtn, 4) { doSave() }
+        // Con confianza baja no se guarda solo: hay que decidir.
+        if (groupMode && !lowConf) startAutoSave(saveBtn, 4) { doSave() }
     }
 
     private fun startAutoSave(b: Button, seconds: Int, action: () -> Unit) {

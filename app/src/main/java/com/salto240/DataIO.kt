@@ -187,11 +187,11 @@ object DataIO {
 
         val sJumps = ArrayList<List<Any?>>()
         sJumps.add(listOf("Fecha", "Hora", "Atleta", "Grupo", "Prueba", "Altura (cm)", "Vuelo (ms)", "Contacto (ms)", "RSI",
-            "Cajón (cm)", "Carga (kg)", "Masa (kg)", "Potencia (W)", "Saltos", "Caída (%)", "Alturas de la serie", "fps", "Avisos", "Notas"))
+            "Cajón (cm)", "Carga (kg)", "Masa (kg)", "Potencia (W)", "Saltos", "Caída (%)", "Alturas de la serie", "fps", "Método", "Confianza", "Tiempo hasta despegue (ms)", "RSImod", "Avisos", "Notas"))
         for (j in jumps) sJumps.add(listOf(Evaluations.pretty(j.day), j.date.drop(11), j.athlete, group(j.athlete), j.test.label,
             r1(j.heightCm), r1(j.flightMs), r1(j.contactMs), r2(j.rsi), j.boxCm, j.loadKg, j.massKg, j.powerW?.let { Math.round(it).toDouble() },
             j.reps.size.takeIf { it > 0 }, r1(j.fatiguePct), j.reps.joinToString(" ") { String.format(Locale.getDefault(), "%.1f", it) }.ifEmpty { null },
-            j.fps, j.flags.joinToString(" / ").ifEmpty { null }, j.notes.ifEmpty { null }))
+            j.fps, j.method, j.confidence, r1(j.tttMs), r2(j.rsiMod), j.flags.joinToString(" / ").ifEmpty { null }, j.notes.ifEmpty { null }))
 
         val metrics = Metric.values().toList()
         val sEval = ArrayList<List<Any?>>()
@@ -216,6 +216,13 @@ object DataIO {
             }
         }
 
+        val sWell = ArrayList<List<Any?>>()
+        sWell.add(listOf("Fecha", "Atleta", "Grupo") + Wellness.ITEMS.map { it.label } + listOf("Total", "Semáforo"))
+        for ((n, e) in Wellness.all(ctx).filter { names == null || it.first in names }.sortedWith(compareBy({ it.first }, { it.second.day }))) {
+            sWell.add(listOf<Any?>(Evaluations.pretty(e.day), n, group(n)) + Wellness.ITEMS.map { e.values[it.key] } +
+                listOf(e.total, Wellness.status(ctx, n, e.day)?.light?.label))
+        }
+
         val sClients = ArrayList<List<Any?>>()
         sClients.add(listOf("Nombre", "Grupo", "Fecha de nacimiento", "Edad", "Sexo", "Peso (kg)", "Estatura (cm)", "Deporte", "Posición",
             "Pierna dominante", "Largo de pierna (cm)", "Altura a 90° (cm)", "Notas"))
@@ -226,10 +233,11 @@ object DataIO {
         val f = ShareFiles.newFile(ctx, (if (names?.size == 1) "AVD jump ${names.first()} $stamp" else "AVD jump datos $stamp") + ".xlsx")
         f.outputStream().use { out ->
             Xlsx.write(out, listOf(
-                Xlsx.Sheet("Saltos", sJumps, listOf(11, 7, 22, 12, 22, 10, 10, 11, 7, 9, 9, 9, 10, 7, 8, 24, 6, 30, 20)),
+                Xlsx.Sheet("Saltos", sJumps, listOf(11, 7, 22, 12, 22, 10, 10, 11, 7, 9, 9, 9, 10, 7, 8, 24, 6, 10, 10, 14, 8, 30, 20)),
                 Xlsx.Sheet("Evaluaciones", sEval, listOf(11, 22, 12, 7) + metrics.map { 14 }),
                 Xlsx.Sheet("Intentos", sAtt, listOf(11, 22, 22, 9, 9, 11, 9, 9, 8, 40)),
                 Xlsx.Sheet("Disposición", sReady, listOf(11, 22, 12, 8, 10, 13, 9, 10, 7, 12)),
+                Xlsx.Sheet("Bienestar", sWell, listOf(11, 22, 12, 16, 10, 10, 14, 7, 12)),
                 Xlsx.Sheet("Clientes", sClients, listOf(22, 12, 14, 6, 10, 9, 11, 12, 12, 14, 16, 14, 24))
             ))
         }

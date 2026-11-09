@@ -107,7 +107,9 @@ class ReadinessActivity : BaseActivity() {
         listBox = vbox(10)
         root.addView(listBox, lp())
         root.addView(text("Verde: dentro de su variación normal (z ≥ −1). Amarillo: entre −1 y −2 desviaciones. Rojo: más de 2 por debajo. " +
-            "La línea base son sus últimos 10 días medidos (mínimo 3). Cambio mínimo significativo (SWC) = 0,2 × desviación entre días.",
+            "La línea base son sus últimos 10 días medidos (mínimo 3). Cambio mínimo significativo (SWC) = 0,2 × desviación entre días.\n" +
+            "Bienestar: sueño, fatiga, estrés y dolor muscular de 1 a 5 (5 es lo mejor). Amarillo si alguno es 1 o 2 o el total está más de 1 desviación bajo su media; " +
+            "rojo si está 2 desviaciones por debajo o el total es 9 o menos. El color de cada atleta es el peor entre el salto y el bienestar.",
             12f, Col.MUTED))
         setContentView(ScrollView(this).apply { setBackgroundColor(Col.BG); addView(root) })
         groupSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
@@ -133,15 +135,17 @@ class ReadinessActivity : BaseActivity() {
         val clients = Clients.inGroup(this, g?.id)
         if (clients.isEmpty()) { listBox.addView(text("No hay clientes en este grupo.", 14f, Col.MUTED)); return }
         val rows = clients.map { c -> c to Readiness.of(all.filter { it.athlete == c.name }, today) }
-            .sortedBy { (_, r) -> when (r?.light) { Readiness.Light.RED -> 0; Readiness.Light.YELLOW -> 1; Readiness.Light.GREEN -> 2; Readiness.Light.NONE -> 3; null -> 4 } }
+            .map { (c, r) -> Triple(c, r, Wellness.status(this, c.name, today)) }
+            .sortedBy { (_, r, w) -> when (Wellness.combine(r?.light, w?.light)) { Readiness.Light.RED -> 0; Readiness.Light.YELLOW -> 1; Readiness.Light.GREEN -> 2; Readiness.Light.NONE -> 3; null -> 4 } }
         var pending = 0
-        for ((c, r) in rows) {
+        for ((c, r, w) in rows) {
             val card = panel()
             val head = hbox(10)
-            val dot = View(this).apply { background = rounded(r?.light?.color ?: Col.LINE, 0, 8) }
+            val light = Wellness.combine(r?.light, w?.light)
+            val dot = View(this).apply { background = rounded(light?.color ?: Col.LINE, 0, 8) }
             head.addView(dot, LinearLayout.LayoutParams(dp(16), dp(16)))
             head.addView(text(c.name, 17f, Col.INK, true), lp(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-            head.addView(text(r?.light?.label ?: "Sin medir hoy", 14f, r?.light?.color ?: Col.MUTED, true))
+            head.addView(text(light?.label ?: "Sin medir hoy", 14f, light?.color ?: Col.MUTED, true))
             card.addView(head, lp())
             if (r == null) {
                 pending++
@@ -151,6 +155,15 @@ class ReadinessActivity : BaseActivity() {
                 card.addView(text(r.line(), 14f, Col.INK))
                 card.addView(text(r.light.advice, 13f, Col.MUTED))
             }
+            if (w != null) {
+                card.addView(text("Bienestar: " + w.entry.line() + (w.mean?.let { String.format(Locale.getDefault(), " (media %.1f)", it) } ?: ""), 13f, Col.INK))
+                if (w.light != Readiness.Light.GREEN) card.addView(text(w.reason, 13f, w.light.color))
+                if (r != null && w.light != r.light && r.light != Readiness.Light.NONE)
+                    card.addView(text(if (w.light == Wellness.combine(r.light, w.light)) "Se toma el peor de los dos: el bienestar." else "Se toma el peor de los dos: el salto.", 12f, Col.MUTED))
+            }
+            card.addView(button(if (w == null) "Cuestionario de bienestar" else "Cambiar bienestar de hoy") {
+                Wellness.ask(this, c.name) { render() }
+            }, lp())
             card.addView(button(if (r == null) "Medir CMJ ahora" else "Otro intento") {
                 startActivity(MainActivity.captureIntent(this, TestType.CMJ, c.name, c.massKg, null, 0.0))
             }, lp())
@@ -159,6 +172,7 @@ class ReadinessActivity : BaseActivity() {
             }
             listBox.addView(card, lp())
         }
-        listBox.addView(text("$pending de ${clients.size} sin medir hoy.", 13f, Col.MUTED).apply { gravity = Gravity.END }, lp())
+        val noW = rows.count { it.third == null }
+        listBox.addView(text("$pending de ${clients.size} sin medir hoy · $noW sin cuestionario de bienestar.", 13f, Col.MUTED).apply { gravity = Gravity.END }, lp())
     }
 }

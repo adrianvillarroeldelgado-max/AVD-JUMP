@@ -70,8 +70,12 @@ object AutoDetect {
         val takeoffSub: Double? = null,
         val landingSub: Double? = null,
         val contactSub: Double? = null,
-        val eventsSub: List<Double> = emptyList()
+        val eventsSub: List<Double> = emptyList(),
+        /** Confianza de la detección (0–100) y motivos si es menor. */
+        val confidence: Int? = null,
+        val reasons: List<String> = emptyList()
     ) {
+        val confidenceLevel: Int get() = when { confidence == null -> -1; confidence >= 75 -> 2; confidence >= 50 -> 1; else -> 0 }
         /** Tiempo de vuelo en cuadros (con fracción si se pudo calcular). */
         val flightFrames: Double? get() = when {
             takeoffSub != null && landingSub != null -> landingSub - takeoffSub
@@ -81,6 +85,14 @@ object AutoDetect {
     }
 
     private const val E_CONTRAST = "No se distinguen los pies del fondo cerca de la línea del suelo. Pon la línea justo donde apoya la suela, con buena luz y calzado que contraste con el suelo."
+    const val R_CONTRAST = "Poco contraste entre el calzado y el suelo"
+    const val R_SIMPLE = "La suela no se distingue bien del suelo"
+    const val R_MOVE = "Algo se movió en la franja del suelo durante el vuelo"
+    const val R_FLICKER = "El contacto aparece y desaparece durante el vuelo"
+    const val R_HEIGHT = "Altura poco habitual"
+    const val R_EDGE = "Despegue o aterrizaje poco nítidos"
+    const val R_MULTI = "Hay más de un vuelo posible en el video"
+    const val R_STILL = "El atleta no estuvo quieto antes de saltar"
     private const val E_NOFLIGHT = "No se encontró ninguna fase de vuelo. Revisa la línea del suelo o marca a mano."
 
     // ------------------------------------------------------------------ utilidades
@@ -478,6 +490,7 @@ object AutoDetect {
          * una recta y se calcula en qué instante cruzó la fila del suelo, entre el último cuadro de apoyo y el
          * primero en el aire. A 240 fps la mejora es pequeña; a 120, 60 o 30 fps es grande.
          */
+        var edgeHits = 0
         fun subCross(frames: List<Int>, lo: Double, hi: Double): Double? {
             if (!SUBFRAME || !useBlocks) return null
             val pts = frames.filter { it in 0 until n && !raw[it] && bottoms[it] >= 0 }.map { it.toDouble() to (lineRow - bottoms[it]).toDouble() }
@@ -489,6 +502,7 @@ object AutoDetect {
             val b = sxy / sxx
             if (abs(b) < 0.2) return null
             val cross = mt + (SUB_H0 - mh) / b
+            if (cross < lo - 0.5 || cross > hi + 0.5) edgeHits++
             return cross.coerceIn(lo, hi)
         }
         fun subTakeoff(to: Int): Double? {
@@ -549,6 +563,31 @@ object AutoDetect {
                     preContact = rs.getOrNull(f.index - 1)?.len, quality = quality)
             }
         }
+        // Confianza: penalizaciones por cada señal de que la detección pudo fallar.
+        var conf = 100
+        val why = ArrayList<String>()
+        fun minus(v: Int, msg: String) { conf -= v; if (msg !in why) why.add(msg) }
+        if (quality < 0.25f) minus(30, R_CONTRAST) else if (quality < 0.4f) minus(12, R_CONTRAST)
+        if (!useBlocks) minus(10, R_SIMPLE)
+        val pairs = when {
+            res.events.isNotEmpty() -> res.events.chunked(2).filter { it.size == 2 }.map { it[0] to it[1] }
+            res.takeoff != null && res.landing != null -> listOf(res.takeoff to res.landing)
+            else -> emptyList()
+        }
+        for ((a, b) in pairs) {
+            val e = emptiness(a, b)
+            if (e > 0.05f) minus(35, R_MOVE) else if (e > 0.02f) minus(18, R_MOVE)
+            if ((a + 1 until b - 1).count { raw[it] } > 0) minus(15, R_FLICKER)
+            val fs = (b - a).toDouble() / fps
+            val hc = 9.81 * fs * fs / 8 * 100
+            if (!test.isRepeated && (hc < 4 || hc > 80)) minus(55, R_HEIGHT)
+            else if (!test.isRepeated && hc > 65) minus(20, R_HEIGHT)
+        }
+        if (edgeHits > 2) minus(8, R_EDGE)
+        if (!test.isRepeated && flights.count { it.value.len >= 2 * minFlight } > 1) minus(15, R_MULTI)
+        if (!test.isDrop && (res.preContact ?: 0) < 0.25 * fps) minus(30, R_STILL)
+        val resC = res.copy(confidence = conf.coerceIn(0, 100), reasons = why)
+
         val score = when {
             res.events.isNotEmpty() -> res.events.chunked(2).filter { it.size == 2 }.map { emptiness(it[0], it[1]) }.average().toFloat()
             res.takeoff != null && res.landing != null -> emptiness(res.takeoff, res.landing)
@@ -557,6 +596,6 @@ object AutoDetect {
         // Un vuelo sin apoyo previo suficiente (salvo Drop Jump) es sospechoso: se penaliza.
         val pre = res.preContact ?: 0
         val penalty = if (!test.isDrop && pre < 0.25 * fps) 1f else 0f
-        return res to (score + penalty)
+        return resC to (score + penalty)
     }
 }

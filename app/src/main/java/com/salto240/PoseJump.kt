@@ -45,8 +45,13 @@ class PoseJumpDetector(private val test: TestType, statureCm: Double?, private v
         val heightCm: Double,
         val contactS: Double?,     // DJ: contacto tras la caída; RJ: contacto previo (desde el 2.º salto)
         val takeoffT: Double,
-        val landingT: Double
-    )
+        val landingT: Double,
+        /** CMJ: tiempo desde el inicio del contramovimiento hasta el despegue (s), para el RSI modificado. */
+        val tttS: Double? = null
+    ) {
+        /** RSI modificado = altura (m) / tiempo hasta el despegue (s). */
+        val rsiMod: Double? get() = tttS?.let { heightCm / 100.0 / it }
+    }
 
     sealed class Event {
         data class Jump(val rep: Rep) : Event()
@@ -469,7 +474,8 @@ class PoseJumpDetector(private val test: TestType, statureCm: Double?, private v
                 if (dur(runs[ri - 1]) < minQuietS) return null
                 val one = rep(r, null) ?: return null
                 if (CHECK_RISE && !bentBefore(one.takeoffT, k)) { lastReject = "sin agacharse"; rejections++; return null }
-                Event.Jump(one)
+                val cm = test == TestType.CMJ || test == TestType.CMJA || test == TestType.CMJ_L || test == TestType.CMJ_R
+                Event.Jump(if (cm) one.copy(tttS = timeToTakeoff(one.takeoffT, k)) else one)
             }
         }
     }
@@ -487,6 +493,68 @@ class PoseJumpDetector(private val test: TestType, statureCm: Double?, private v
         val standing = all[(all.size * 0.1).toInt()]          // de pie: de los más altos (y menor)
         val low = near[near.size - 2]                            // lo más bajo cerca del despegue (sin el extremo)
         return (low - standing) / k >= 8.0
+    }
+
+    /**
+     * Tiempo hasta el despegue (CMJ): desde que la cadera (o la cabeza si no se ve) empieza a bajar hasta el despegue.
+     * - Punto más bajo: el cuadro más bajo en el último 1,2 s antes de despegar.
+     * - De pie: la ventana quieta de 0,3 s más cercana antes del punto más bajo, al menos 8 cm por encima.
+     * - Inicio: yendo hacia atrás desde el punto más bajo, el último cuadro (suavizado de a 3) que está más de un 6 %
+     *   de la profundidad (o 2,5 veces el ruido) por debajo; se extrapola con la pendiente hasta el 25 % de la profundidad.
+     * Sin datos suficientes devuelve null (no se calcula el RSI modificado).
+     */
+    private fun timeToTakeoff(to: Double, k: Double): Double? {
+        val win = buf.filter { it.t in (to - 4.0)..(to - 0.02) }
+        if (win.size < 12) return null
+        val useHip = win.count { it.hip != null } >= 0.7 * win.size
+        val raw = win.mapNotNull { s -> (if (useHip) s.hip else s.nose)?.let { s.t to it } }
+        if (raw.size < 12) return null
+        // Con menos de 14 análisis por segundo el inicio del movimiento no se ubica bien.
+        if ((raw.size - 1) / (raw.last().first - raw.first().first) < 14.0) return null
+        // Suavizado: media de 3 cuadros seguidos.
+        val pts = raw.indices.map { i ->
+            val a = max(0, i - 1); val b = min(raw.size - 1, i + 1)
+            raw[i].first to (a..b).sumOf { raw[it].second } / (b - a + 1)
+        }
+        val near = pts.indices.filter { pts[it].first >= to - 1.2 }
+        if (near.size < 4) return null
+        val iLow = near.maxByOrNull { pts[it].second }!!
+        val yLow = pts[iLow].second
+        // Ruido: mediana de la diferencia entre cuadros seguidos (sin suavizar).
+        val dif = (1 until raw.size).map { abs(raw[it].second - raw[it - 1].second) }.sorted()
+        val noise = max(0.5, dif[dif.size / 2] / 0.954) / sqrt(3.0)
+        // De pie: ventana quieta antes del punto más bajo.
+        val tol = max(2.5 * k, 4 * noise)
+        var base: Double? = null; var iBase = -1
+        var j = iLow
+        while (j >= 0) {
+            val tEnd = pts[j].first
+            val w = pts.indices.filter { pts[it].first in (tEnd - 0.3)..tEnd }
+            if (w.size >= 4) {
+                val ys = w.map { pts[it].second }
+                val med = ys.sorted()[ys.size / 2]
+                if (ys.maxOrNull()!! - ys.minOrNull()!! <= tol && yLow - med >= 8.0 * k) { base = med; iBase = j; break }
+            }
+            j--
+        }
+        if (base == null) return null
+        val depth = yLow - base
+        val thr = max(0.06 * depth, 2.5 * noise)
+        // Desde el punto más bajo hacia atrás: el último cuadro por encima del umbral marca el inicio
+        // (un pico de ruido antes, estando de pie, no adelanta el inicio).
+        var iOn = -1
+        for (i in iLow downTo 1) {
+            if (pts[i - 1].second - base < thr) { iOn = i; break }
+        }
+        if (iOn <= 0) return null
+        // Cruce exacto del umbral y extrapolación hasta el nivel de pie con la pendiente inicial.
+        val (t0, y0) = pts[iOn - 1]; val (t1, y1) = pts[iOn]
+        val tc = if (y1 > y0) t0 + (base + thr - y0) / (y1 - y0) * (t1 - t0) else t1
+        val i25 = (iOn until iLow).firstOrNull { pts[it].second - base >= 0.25 * depth } ?: iLow
+        val slope = if (pts[i25].first > tc) (pts[i25].second - (base + thr)) / (pts[i25].first - tc) else 0.0
+        val onset = if (slope > 0) tc - thr / slope else tc
+        val ttt = to - onset
+        return ttt.takeIf { it in 0.25..2.0 }
     }
 
     /** Sin huecos largos (cuadros sin cuerpo) durante el vuelo. */

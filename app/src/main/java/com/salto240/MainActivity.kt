@@ -175,6 +175,7 @@ class MainActivity : BaseActivity() {
         pEval.addView(button("Historial de evaluaciones") { openWithAthlete(ClientHistoryActivity::class.java) }, lp())
         pEval.addView(button("Perfil fuerza-velocidad") { openWithAthlete(FvProfileActivity::class.java) }, lp())
         pEval.addView(button("Informe y recomendaciones") { openWithAthlete(ReportActivity::class.java) }, lp())
+        pEval.addView(button("Curva de fuerza con acelerómetro (experimental)") { openWithAthlete(AccelActivity::class.java) }, lp())
         pEval.addView(button("Historial") { startActivity(Intent(this, HistoryActivity::class.java)) }, lp())
         root.addView(pEval, lp())
 
@@ -182,6 +183,7 @@ class MainActivity : BaseActivity() {
         val pTeam = panel()
         pTeam.addView(caption("Equipos"))
         pTeam.addView(button("Sesión de grupo con voz", true) { startActivity(Intent(this, GroupSessionActivity::class.java)) }, lp())
+        pTeam.addView(button("Cuestionario de bienestar del cliente") { requireClient()?.let { remember(); Wellness.ask(this, athleteName()) } }, lp())
         pTeam.addView(button("Disposición diaria (fatiga)") { startActivity(Intent(this, ReadinessActivity::class.java)) }, lp())
         pTeam.addView(button("Ranking del grupo") { startActivity(Intent(this, RankingActivity::class.java)) }, lp())
         root.addView(pTeam, lp())
@@ -191,6 +193,7 @@ class MainActivity : BaseActivity() {
         pData.addView(caption("Datos"))
         backupInfo = text("", 13f, Col.MUTED)
         pData.addView(backupInfo)
+        pData.addView(button("Validación y calibración") { startActivity(Intent(this, ValidationActivity::class.java)) }, lp())
         pData.addView(button("Ajustes, copia de seguridad, Excel e idioma") { startActivity(Intent(this, SettingsActivity::class.java)) }, lp())
         root.addView(pData, lp())
 

@@ -14,7 +14,8 @@ enum class Metric(val label: String, val unit: String, val higherIsBetter: Boole
     POGO("RSI pogo", "", true, 2),
     ASYM_DJ("Asimetría reactiva (DJ)", "%", false, 1),
     PMAX("Pmax perfil F-V", "W/kg", true, 1),
-    FV("Perfil F-V (% del óptimo)", "%", true, 0);
+    FV("Perfil F-V (% del óptimo)", "%", true, 0),
+    RSIMOD("RSI modificado (CMJ)", "", true, 2);
 
     fun format(v: Double): String =
         String.format(Locale.getDefault(), "%.${decimals}f", v) + if (unit.isEmpty()) "" else " $unit"
@@ -32,6 +33,7 @@ object Evaluations {
         val m = mutableMapOf<Metric, Double>()
         Analytics.best(day, TestType.CMJ)?.let { m[Metric.CMJ] = it }
         Analytics.best(day, TestType.CMJA)?.let { m[Metric.CMJA] = it }
+        day.filter { it.test == TestType.CMJ }.mapNotNull { it.rsiMod }.maxOrNull()?.let { m[Metric.RSIMOD] = it }
         Analytics.bestSjUnloaded(day)?.let { m[Metric.SJ] = it }
         day.filter { it.test == TestType.DJ }.mapNotNull { it.rsi }.maxOrNull()?.let { m[Metric.RSI] = it }
         Analytics.asymmetry(day)?.let { m[Metric.ASYM] = it.third }

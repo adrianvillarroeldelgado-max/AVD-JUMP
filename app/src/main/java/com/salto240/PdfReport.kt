@@ -184,6 +184,9 @@ object PdfReport {
         Readiness.of(js, e.day)?.let { r ->
             w.text("Disposición del día: ${r.light.label}. ${r.line()}. ${r.light.advice}", TextPaint(w.body).apply { color = r.light.color })
         }
+        Wellness.status(ctx, name, e.day)?.let { st ->
+            w.text("Bienestar del día: ${st.light.label}. ${st.entry.line()}. ${st.reason}", TextPaint(w.body).apply { color = st.light.color })
+        }
 
         // Intentos
         val att = Attempts.summarize(e.jumps)

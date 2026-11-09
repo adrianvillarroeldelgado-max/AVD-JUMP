@@ -37,6 +37,10 @@ class AnalysisActivity : BaseActivity() {
         const val EX_PRESET_EVENTS = "presetEvents"
         const val EX_PRESET_SUB = "presetSub"
         const val EX_PRESET_EVENTS_SUB = "presetEventsSub"
+        const val EX_PRESET_CONF = "presetConf"
+        /** Video recibido con «Compartir»: tras elegir los fps se pide tocar el suelo; la copia se borra si no se guarda. */
+        const val EX_SHARED = "sharedVideo"
+        const val EX_PRESET_REASONS = "presetReasons"
         /** Id de un salto ya guardado que se vuelve a medir: al guardar se actualiza en lugar de crear otro. */
         const val EX_EDIT_ID = "editJumpId"
     }
@@ -91,6 +95,22 @@ class AnalysisActivity : BaseActivity() {
     @Volatile private var scanCancelled = false
     private val zoomButtons = mutableListOf<Button>()
 
+    // Revisión asistida: zona de los pies (coordenadas normalizadas de la imagen) y cuadros vecinos ampliados.
+    private var footU = 0.5f
+    private var footV = -1f
+    private lateinit var stripBox: LinearLayout
+    private val stripImgs = mutableListOf<ImageView>()
+    private val stripLabels = mutableListOf<TextView>()
+    private var stripOn = true
+    private var feetBtn: Button? = null
+    // Resultado automático: confianza y marcas tal como las dejó la detección.
+    private var autoConf: Int? = null
+    private var autoReasons: List<String> = emptyList()
+    private var autoMarks: Map<String, Int> = emptyMap()
+    private var autoEvents: List<Int> = emptyList()
+    private fun marksAreAuto(): Boolean = autoConf != null &&
+        (if (isRj) events == autoEvents else markDefs.all { marks[it.first] == autoMarks[it.first] })
+
     private val isRj get() = test.isRepeated
 
     private val markDefs: List<Pair<String, String>>
@@ -129,9 +149,11 @@ class AnalysisActivity : BaseActivity() {
         buildUi(s)
         show(0)
         compute()
+        pickAfterFps = intent.getBooleanExtra(EX_SHARED, false)
         if (recFps <= 0) askFps(s.fileFps)
         // Grabado con la línea del suelo de la cámara: detección automática directa.
         val floorV = intent.getFloatExtra(CaptureActivity.EX_FLOOR_V, -1f)
+        if (floorV in 0.05f..0.98f) footV = floorV
         val preset = presetResult()
         if (fromRecording && floorV in 0.05f..0.98f) {
             img.post {
@@ -156,6 +178,8 @@ class AnalysisActivity : BaseActivity() {
         val evSub = intent.getDoubleArrayExtra(EX_PRESET_EVENTS_SUB)?.toList() ?: emptyList()
         return AutoDetect.Result(takeoff = to, landing = ld, contact = c, events = ev,
             takeoffSub = sv(0), landingSub = sv(1), contactSub = sv(2), eventsSub = evSub,
+            confidence = intent.getIntExtra(EX_PRESET_CONF, -1).takeIf { it >= 0 },
+            reasons = intent.getStringArrayExtra(EX_PRESET_REASONS)?.toList() ?: emptyList(),
             error = if (test.isDrop && c == null && ev.isEmpty()) "No se detectó el contacto inicial tras la caída; márcalo a mano." else null)
     }
 
@@ -215,6 +239,17 @@ class AnalysisActivity : BaseActivity() {
             zoomButtons.add(b)
             zoomRow.addView(b, LinearLayout.LayoutParams(dp(48), dp(40)))
         }
+        feetBtn = Button(this).apply {
+            text = "Pies"
+            isAllCaps = false
+            setTextColor(0xFFFFFFFF.toInt())
+            minWidth = dp(52); minimumWidth = dp(52)
+            minHeight = dp(36); minimumHeight = dp(36)
+            stateListAnimator = null
+            background = rounded(0xB30A0E16.toInt(), 0x55FFFFFF, 4)
+            setOnClickListener { focusFeet() }
+        }
+        zoomRow.addView(feetBtn, LinearLayout.LayoutParams(dp(60), dp(40)))
         viewer.addView(zoomRow, FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM or Gravity.END).apply {
             setMargins(0, 0, dp(8), dp(8))
@@ -243,6 +278,9 @@ class AnalysisActivity : BaseActivity() {
                     }
                 } else if (zoom > 1f) {
                     img.pivotX = e.x; img.pivotY = e.y
+                } else {
+                    // Con 1× un toque indica dónde están los pies: ahí se centran las ampliaciones.
+                    toImage(e.x, e.y)?.let { (u, vv) -> footU = u; footV = vv; refreshStrip() }
                 }
                 v.performClick()
             }
@@ -250,6 +288,24 @@ class AnalysisActivity : BaseActivity() {
         }
         root.addView(viewer, lp(h = 0, weight = 1f))
         setZoom(1f)
+
+        // Cuadros anterior, actual y siguiente, ampliados en los pies: se ve el instante exacto de despegue y aterrizaje.
+        stripBox = hbox(4).apply { visibility = android.view.View.GONE }
+        for (k in 0..2) {
+            val cell = vbox(0)
+            val iv = ImageView(this).apply {
+                scaleType = ImageView.ScaleType.FIT_CENTER
+                setBackgroundColor(0xFF000000.toInt())
+                setOnClickListener { show(frame + k - 1) }
+            }
+            stripImgs.add(iv)
+            cell.addView(iv, lp(h = dp(78)))
+            val lab = text("", 11f, if (k == 1) Col.INK else Col.MUTED, k == 1).apply { gravity = Gravity.CENTER }
+            stripLabels.add(lab)
+            cell.addView(lab, lp())
+            stripBox.addView(cell, lp(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        }
+        root.addView(stripBox, lp())
 
         // Navegación
         seek = SeekBar(this).apply {
@@ -269,6 +325,21 @@ class AnalysisActivity : BaseActivity() {
             }, lp(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
         }
         root.addView(steps, lp())
+
+        // Saltar directo a cada marca, con los pies ampliados.
+        val goRow = hbox(6)
+        if (isRj) {
+            goRow.addView(button("◀ Marca anterior") { events.lastOrNull { it < frame }?.let { goTo(it) } }, lp(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+            goRow.addView(button("Marca siguiente ▶") { events.firstOrNull { it > frame }?.let { goTo(it) } }, lp(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        } else {
+            for ((key, name) in markDefs) {
+                goRow.addView(button("Ir a ${name.lowercase()}") {
+                    val m = marks[key]
+                    if (m == null) Tst.makeText(this, "Aún no hay marca de ${name.lowercase()}.", Toast.LENGTH_SHORT).show() else goTo(m)
+                }.apply { textSize = 12f }, lp(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+            }
+        }
+        root.addView(goRow, lp())
 
         // Marcas
         val markRow = hbox(6)
@@ -301,8 +372,9 @@ class AnalysisActivity : BaseActivity() {
         }
         root.addView(markRow, lp())
         root.addView(text(
-            if (isRj) "Marca en orden: despegue, aterrizaje, despegue… · mantén pulsado para volver a la última marca · volumen ± = 1 cuadro"
-            else "Toca para marcar el cuadro actual · mantén pulsado para volver a él · volumen ± = 1 cuadro",
+            (if (isRj) "Marca en orden: despegue, aterrizaje, despegue… · mantén pulsado para volver a la última marca · volumen ± = 1 cuadro"
+            else "Toca para marcar el cuadro actual · mantén pulsado para volver a él · volumen ± = 1 cuadro") +
+            "\nDespegue: primer cuadro con los pies en el aire. Aterrizaje: primer cuadro en que el pie toca el suelo. Contacto (Drop Jump): primer cuadro en que toca el suelo tras caer.",
             11f, Col.MUTED))
 
         // Resultado
@@ -338,7 +410,7 @@ class AnalysisActivity : BaseActivity() {
         val s = src ?: return
         frame = i.coerceIn(0, s.frameCount - 1)
         seek.progress = frame
-        hud.text = String.format(Locale.getDefault(), "cuadro %d · %.3f s", frame, frame.toDouble() / capFps)
+        hud.text = String.format(Locale.getDefault(), "cuadro %d · %.3f s", frame, frame.toDouble() / capFps) + markAt(frame)
         wanted = frame
         val req = frame
         exec.execute {
@@ -347,8 +419,75 @@ class AnalysisActivity : BaseActivity() {
             main.post {
                 if (wanted == req && b != null && !b.isRecycled) img.setImageBitmap(b)
             }
+            if (wanted == req) buildStrip(s, req)
             // Precarga el bloque siguiente para avanzar sin espera.
             if (wanted == req) s.frame(req + 12)
+        }
+    }
+
+    /** Nombre de la marca que cae en el cuadro [i], para el visor. */
+    private fun markAt(i: Int): String {
+        if (isRj) {
+            val k = events.indexOf(i)
+            return if (k < 0) "" else (if (k % 2 == 0) " · DESPEGUE ${k / 2 + 1}" else " · ATERRIZAJE ${k / 2 + 1}")
+        }
+        val names = markDefs.filter { marks[it.first] == i }.map { it.second.uppercase() }
+        return if (names.isEmpty()) "" else " · " + names.joinToString(" / ")
+    }
+
+    private fun goTo(i: Int) {
+        show(i)
+        if (footV > 0f && zoom == 1f) focusFeet()
+    }
+
+    /** Amplía 3× centrado en los pies (la línea del suelo y el punto tocado o el centro). */
+    private fun focusFeet() {
+        if (footV <= 0f) {
+            Tst.makeText(this, "Toca los pies en el video (con 1×) o pulsa Auto para indicar el suelo.", Toast.LENGTH_LONG).show()
+            return
+        }
+        val d = img.drawable ?: return
+        val m = FloatArray(9)
+        img.imageMatrix.getValues(m)
+        val x = m[android.graphics.Matrix.MTRANS_X] + footU * d.intrinsicWidth * m[android.graphics.Matrix.MSCALE_X]
+        val y = m[android.graphics.Matrix.MTRANS_Y] + footV * d.intrinsicHeight * m[android.graphics.Matrix.MSCALE_Y]
+        setZoom(if (zoom >= 3f) 1f else 3f)
+        if (zoom > 1f) { img.pivotX = x; img.pivotY = y }
+    }
+
+    private fun refreshStrip() {
+        val s = src ?: return
+        val req = frame
+        exec.execute { if (wanted == req) buildStrip(s, req) }
+    }
+
+    /** Recorta la zona de los pies de los cuadros i−1, i, i+1 y dibuja la línea del suelo. Corre en el hilo de fondo. */
+    private fun buildStrip(s: FrameSource, i: Int) {
+        if (!stripOn || footV <= 0f) { main.post { stripBox.visibility = android.view.View.GONE }; return }
+        val out = (-1..1).map { d ->
+            val b = s.frame(i + d) ?: return@map null
+            if (b.isRecycled) return@map null
+            val cw = (b.width * 0.34f).toInt().coerceAtLeast(16)
+            val ch = (cw * 0.55f).toInt().coerceAtMost(b.height)
+            val cx = (footU * b.width).toInt()
+            val fy = (footV * b.height).toInt()
+            val x0 = (cx - cw / 2).coerceIn(0, b.width - cw)
+            val y0 = (fy - (ch * 0.7f).toInt()).coerceIn(0, b.height - ch)
+            val bmp = android.graphics.Bitmap.createBitmap(cw, ch, android.graphics.Bitmap.Config.ARGB_8888)
+            val c = android.graphics.Canvas(bmp)
+            c.drawBitmap(b, android.graphics.Rect(x0, y0, x0 + cw, y0 + ch), android.graphics.Rect(0, 0, cw, ch), null)
+            val paint = android.graphics.Paint().apply { color = Col.ACCENT; strokeWidth = (ch / 60f).coerceAtLeast(1.5f); alpha = 200 }
+            c.drawLine(0f, (fy - y0).toFloat(), cw.toFloat(), (fy - y0).toFloat(), paint)
+            bmp
+        }
+        main.post {
+            if (wanted != i) return@post
+            stripBox.visibility = android.view.View.VISIBLE
+            for (k in 0..2) {
+                out[k]?.let { stripImgs[k].setImageBitmap(it) } ?: stripImgs[k].setImageDrawable(null)
+                val f = i + k - 1
+                stripLabels[k].text = (if (k == 1) "#$f" else if (k == 0) "◀ #$f" else "#$f ▶") + markAt(f).replace(" · ", " ")
+            }
         }
     }
 
@@ -377,10 +516,13 @@ class AnalysisActivity : BaseActivity() {
                 fpsBtn.text = "$capFps fps"
                 show(frame); compute()
                 d.dismiss()
+                if (pickAfterFps) { pickAfterFps = false; startFloorPick() }
             }
             .setNegativeButton("Cerrar", null)
             .show()
     }
+
+    private var pickAfterFps = false
 
     private fun stat(label: String, value: String) = String.format("%-18s %s\n", label, value)
     private fun fmt(p: String, vararg a: Any?) = String.format(Locale.getDefault(), p, *a)
@@ -445,6 +587,7 @@ class AnalysisActivity : BaseActivity() {
             }
         }
         sb.append(fmt("±1 cuadro = ±%.1f ms", 1000.0 / capFps))
+        sb.append(confNote())
 
         resultBig.text = fmt("%.1f cm", h)
         resultDetail.text = sb.toString()
@@ -512,6 +655,7 @@ class AnalysisActivity : BaseActivity() {
         val totalS = (events.last() - events.first()).toDouble() / capFps
         sb.append(stat("Duración", fmt("%.2f s", totalS)))
         if (events.size % 2 == 1) sb.append("Falta el aterrizaje del último salto.\n")
+        sb.append(confNote().trimStart())
 
         resultBig.text = fmt("%.1f cm", meanH)
         resultDetail.text = sb.toString()
@@ -540,6 +684,12 @@ class AnalysisActivity : BaseActivity() {
         saveBtn.isEnabled = true
     }
 
+    private fun confNote(): String = when {
+        autoConf == null -> ""
+        marksAreAuto() -> "\n" + (Confidence.line(autoConf, autoReasons) ?: "")
+        else -> "\nMarcas corregidas a mano"
+    }
+
     /** Texto de asimetría si la otra pierna ya se midió hoy. */
     private fun asymmetryNote(saved: Jump): String? = JumpCalc.asymmetryNote(this, saved)
 
@@ -559,7 +709,9 @@ class AnalysisActivity : BaseActivity() {
             if (old != null) {
                 val upd = j.copy(id = old.id, date = old.date, athlete = old.athlete,
                     notes = notes.text.toString().trim().ifEmpty { old.notes },
-                    video = old.video, marks = currentMarks())
+                    video = old.video, marks = currentMarks(), method = old.method ?: "video",
+                    confidence = null, flags = old.flags.filter { it != Confidence.FLAG_LOW },
+                    tttMs = old.tttMs, rsiMod = old.tttMs?.takeIf { it > 0 }?.let { j.heightCm / 100.0 / (it / 1000.0) }, extra = old.extra - "hRaw" - "cal" + ("revisado" to 1.0))
                 Store.update(this, upd)
                 saveBtn.isEnabled = false
                 Dlg(this)
@@ -572,7 +724,11 @@ class AnalysisActivity : BaseActivity() {
             }
         }
         val saved = j.copy(notes = notes.text.toString().trim(),
-            video = Videos.forJump(this, videoUri), marks = currentMarks())
+            video = Videos.forJump(this, videoUri), marks = currentMarks(),
+            method = if (intent.getIntExtra(MainActivity.EX_FPS, 0) > 0 && editId < 0) "240" else "video",
+            confidence = if (marksAreAuto()) autoConf else null,
+            flags = if (marksAreAuto() && Confidence.level(autoConf) == 0) listOf(Confidence.FLAG_LOW) else emptyList(),
+            extra = if (autoConf != null && !marksAreAuto()) mapOf("revisado" to 1.0) else emptyMap())
         Store.add(this, saved)
         saveBtn.isEnabled = false
         if (battery) { batterySaved(saved); return }
@@ -658,6 +814,8 @@ class AnalysisActivity : BaseActivity() {
         // Banda alrededor de la línea: tolera que quede un poco alta o baja (ver AutoDetect).
         val y0 = AutoDetect.bandTop(floorV)
         val y1 = AutoDetect.bandBottom(floorV)
+        if (footV <= 0f || halfWidth < 0.4f) { footU = u }
+        footV = floorV
         val x0 = (u - halfWidth).coerceAtLeast(0f)
         val x1 = (u + halfWidth).coerceAtMost(1f)
         scanCancelled = false
@@ -683,6 +841,7 @@ class AnalysisActivity : BaseActivity() {
     }
 
     private fun applyAuto(r: AutoDetect.Result) {
+        autoConf = r.confidence; autoReasons = r.reasons
         var placed = false
         autoSub.clear(); autoEvSub = emptyList()
         if (isRj && r.events.isNotEmpty()) {
@@ -699,10 +858,13 @@ class AnalysisActivity : BaseActivity() {
             }
             placed = true
         }
+        autoMarks = marks.toMap(); autoEvents = events.toList()
+        if (!placed) autoConf = null
         refreshMarks(); compute()
         if (placed) {
-            show(if (isRj) events.first() else r.takeoff ?: 0)
-            val extra = r.error?.let { "\n$it" } ?: ""
+            goTo(if (isRj) events.first() else (if (test.isDrop) marks["contact"] else null) ?: r.takeoff ?: 0)
+            val extra = (r.error?.let { "\n$it" } ?: "") +
+                (Confidence.line(r.confidence, r.reasons)?.let { "\n$it" } ?: "")
             Tst.makeText(this, "Marcas automáticas listas. Revisa con ±1 y corrige si hace falta.$extra", Toast.LENGTH_LONG).show()
         } else {
             Dlg(this)
@@ -722,6 +884,8 @@ class AnalysisActivity : BaseActivity() {
     }
 
     override fun onDestroy() {
+        // Copia de un video compartido: se borra si ningún salto la usa.
+        if (intent.getBooleanExtra(EX_SHARED, false)) Videos.deleteIfUnused(this, intent.getStringExtra(MainActivity.EX_URI))
         scanCancelled = true
         exec.shutdownNow()
         src?.release()

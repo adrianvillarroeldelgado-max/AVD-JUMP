@@ -969,3 +969,234 @@ Análisis:	Analysis:
 (decodificador rápido)	(fast decoder)
 Medido a	Measured at
 fps con fracción de cuadro (±	fps with sub-frame timing (±
+
+# 1.6.13: confianza, revisión, validación, RSI mod, bienestar, compartir, acelerómetro
+Poco contraste entre el calzado y el suelo	Low contrast between shoe and floor
+poco contraste entre el calzado y el suelo	low contrast between shoe and floor
+La suela no se distingue bien del suelo	The sole is hard to tell apart from the floor
+la suela no se distingue bien del suelo	the sole is hard to tell apart from the floor
+Algo se movió en la franja del suelo durante el vuelo	Something moved in the floor strip during the flight
+algo se movió en la franja del suelo durante el vuelo	something moved in the floor strip during the flight
+El contacto aparece y desaparece durante el vuelo	Contact flickers on and off during the flight
+el contacto aparece y desaparece durante el vuelo	contact flickers on and off during the flight
+Altura poco habitual	Unusual height
+altura poco habitual	unusual height
+Despegue o aterrizaje poco nítidos	Takeoff or landing not sharp
+despegue o aterrizaje poco nítidos	takeoff or landing not sharp
+Hay más de un vuelo posible en el video	There is more than one possible flight in the video
+hay más de un vuelo posible en el video	there is more than one possible flight in the video
+El atleta no estuvo quieto antes de saltar	The athlete was not still before jumping
+el atleta no estuvo quieto antes de saltar	the athlete was not still before jumping
+re:Confianza alta	Confidence high
+re:Confianza media	Confidence medium
+re:Confianza baja	Confidence low
+re:confianza alta	high confidence
+re:confianza media	medium confidence
+re:confianza baja	low confidence
+Confianza baja de la detección automática: revisa el despegue y el aterrizaje	Low confidence in the automatic detection: check takeoff and landing
+. Confianza baja: conviene revisarlo.	. Low confidence: you should review it.
+Revisar cuadro a cuadro (recomendado)	Review frame by frame (recommended)
+Corregido por calibración (medido	Corrected by calibration (measured
+Marcas corregidas a mano	Marks corrected by hand
+confianza	confidence
+revisado	reviewed
+calibrado	calibrated
+Pies	Feet
+◀ Marca anterior	◀ Previous mark
+Marca siguiente ▶	Next mark ▶
+Ir a despegue	Go to takeoff
+Ir a aterrizaje	Go to landing
+Ir a contacto	Go to contact
+Aún no hay marca de despegue.	There is no takeoff mark yet.
+Aún no hay marca de aterrizaje.	There is no landing mark yet.
+Aún no hay marca de contacto.	There is no contact mark yet.
+Despegue: primer cuadro con los pies en el aire. Aterrizaje: primer cuadro en que el pie toca el suelo. Contacto (Drop Jump): primer cuadro en que toca el suelo tras caer.	Takeoff: first frame with the feet in the air. Landing: first frame where the foot touches the floor. Contact (Drop Jump): first frame touching the floor after the drop.
+DESPEGUE	TAKEOFF
+ATERRIZAJE	LANDING
+CONTACTO	CONTACT
+Toca los pies en el video (con 1×) o pulsa Auto para indicar el suelo.	Tap the feet in the video (at 1×) or press Auto to set the floor.
+RSI modificado	Modified RSI
+RSI modificado (CMJ)	Modified RSI (CMJ)
+tiempo hasta el despegue	time to takeoff
+Tiempo hasta despegue (ms)	Time to takeoff (ms)
+Tiempo hasta despegue	Time to takeoff
+Método	Method
+Confianza	Confidence
+acelerómetro	accelerometer
+Acelerómetro	Accelerometer
+Sin método	No method
+F pico	Peak F
+P pico	Peak P
+× peso	× body weight
+Curva de fuerza con acelerómetro (experimental)	Force curve with accelerometer (experimental)
+Curva de fuerza con acelerómetro	Force curve with accelerometer
+Cuestionario de bienestar del cliente	Client wellness questionnaire
+Validación y calibración	Validation and calibration
+Bienestar	Wellness
+Bienestar del día	Wellness of the day
+Bienestar de hoy	Today's wellness
+Cuestionario de bienestar	Wellness questionnaire
+Cambiar bienestar de hoy	Change today's wellness
+sin medir hoy	not measured today
+sin cuestionario de bienestar.	without a wellness questionnaire.
+Se toma el peor de los dos: el bienestar.	The worse of the two is used: wellness.
+Se toma el peor de los dos: el salto.	The worse of the two is used: the jump.
+Bienestar: sueño, fatiga, estrés y dolor muscular de 1 a 5 (5 es lo mejor). Amarillo si alguno es 1 o 2 o el total está más de 1 desviación bajo su media; 	Wellness: sleep, fatigue, stress and muscle soreness from 1 to 5 (5 is best). Yellow if any is 1 or 2 or the total is more than 1 SD below the athlete's mean; 
+rojo si está 2 desviaciones por debajo o el total es 9 o menos. El color de cada atleta es el peor entre el salto y el bienestar.	red if it is 2 SD below or the total is 9 or less. Each athlete's colour is the worse of jump and wellness.
+Calidad del sueño	Sleep quality
+Muy mala	Very poor
+Muy buena	Very good
+Muy cansado	Very tired
+Nada cansado	Not tired at all
+Estrés	Stress
+Muy estresado	Very stressed
+Nada estresado	Not stressed at all
+Dolor muscular	Muscle soreness
+Mucho dolor	Very sore
+Sin dolor	No soreness
+Sueño	Sleep
+Dolor	Soreness
+re:· total (\d+)/20	· total $1/20
+Bienestar dentro de lo habitual.	Wellness within the usual range.
+Bienestar muy por debajo de su media.	Wellness well below the athlete's mean.
+Bienestar por debajo de su media.	Wellness below the athlete's mean.
+Bienestar muy bajo (total	Very low wellness (total
+Valor bajo en:	Low value in:
+Bajo en:	Low in:
+calidad del sueño	sleep quality
+dolor muscular	muscle soreness
+5 es lo mejor en todas. Responde cómo se siente ahora, antes de entrenar.	5 is best in all of them. Answer how you feel now, before training.
+Responde las 4 preguntas.	Answer the 4 questions.
+Bienestar: 	Wellness: 
+EXPERIMENTAL	EXPERIMENTAL
+Sujeta el teléfono firme a la cintura: cinturón elástico o riñonera, en la espalda baja o sobre el ombligo, 	Strap the phone firmly to the waist: elastic belt or bum bag, on the lower back or over the navel, 
+sin que baile. Manos en la cadera (salvo CMJ con brazos). Pulsa Empezar, quédate quieto 2 s y salta al oír «¡Salta!». 	so it does not wobble. Hands on hips (except CMJ with arms). Press Start, stand still for 2 s and jump when you hear «Jump!». 
+Aterriza y quédate quieto 1 s.	Land and stay still for 1 s.
+Este teléfono no tiene acelerómetro.	This phone has no accelerometer.
+Naranja: fuerza (veces el peso). Azul: velocidad. Fondo: descarga (amarillo), frenado (rojo), impulso (verde), vuelo (gris).	Orange: force (times body weight). Blue: velocity. Background: unweighting (yellow), braking (red), propulsion (green), flight (grey).
+Cómo se calcula: la fuerza sale de la aceleración del teléfono (F = m·a), la velocidad de integrarla y la altura 	How it is calculated: force comes from the phone's acceleration (F = m·a), velocity from integrating it and height 
+del tiempo de vuelo (como en los otros métodos). Es una estimación: el teléfono se mueve algo respecto del cuerpo y el 	from flight time (as in the other methods). It is an estimate: the phone moves somewhat relative to the body and the 
+sensor de muchos teléfonos mide a 100–400 muestras por segundo, frente a 1000 de una plataforma de fuerza. 	sensor of many phones samples at 100–400 per second, versus 1000 for a force plate. 
+Úsalo para comparar al mismo atleta con el mismo teléfono y la misma sujeción. Valídalo en Validación y calibración.	Use it to compare the same athlete with the same phone and the same strap. Validate it in Validation and calibration.
+Escribe la masa del atleta (kg).	Enter the athlete's mass (kg).
+No hubo 2 s quieto. Sujeta bien el teléfono y vuelve a empezar.	You were not still for 2 s. Fix the phone well and start again.
+No se pudo analizar:	Could not analyze:
+Medido	Measured
+muestras/s	samples/s
+Altura por impulso	Impulse height
+Descarga · frenado	Unweighting · braking
+Contramovimiento	Countermovement
+RFD excéntrico	Eccentric RFD
+Impulso de frenado	Braking impulse
+Impulso (propulsión)	Propulsion
+Fuerza pico	Peak force
+Fuerza media impulso	Mean propulsive force
+Potencia pico	Peak power
+Pico al aterrizar	Landing peak
+Acelerómetro (experimental)	Accelerometer (experimental)
+Se detuvo al salir de la pantalla.	Stopped when leaving the screen.
+Hubo movimiento durante el reposo. Quédate quieto 2 s antes de saltar.	There was movement during the rest period. Stay still for 2 s before jumping.
+El acelerómetro da solo	The accelerometer gives only
+muestras por segundo; hacen falta 100 o más.	samples per second; 100 or more are needed.
+No se encontró el vuelo. Sujeta bien el teléfono a la cintura y salta.	No flight was found. Strap the phone firmly to the waist and jump.
+El salto empezó demasiado pronto: quédate quieto hasta oír «¡Salta!».	The jump started too early: stay still until you hear «Jump!».
+La grabación terminó antes del aterrizaje.	The recording ended before landing.
+Vuelo fuera de rango	Flight out of range
+No se ve bien el inicio del movimiento.	The start of the movement is unclear.
+La altura por impulso	The impulse height
+no coincide con la del vuelo: el teléfono pudo moverse en la cintura.	does not match the flight height: the phone may have moved on the waist.
+Acelerómetro a	Accelerometer at
+muestras/s: los tiempos tienen más error.	samples/s: times have more error.
+Quieto	Stand still
+Listo.	Ready.
+Medido ·	Measured ·
+Analizar en AVD jump	Analyze in AVD jump
+No llegó ningún video.	No video was received.
+Analizar video compartido	Analyze shared video
+Copiando el video…	Copying the video…
+Altura del cajón en Drop Jump (cm)	Box height for Drop Jump (cm)
+En el análisis se pregunta a cuántos fps se grabó y luego se toca el suelo donde apoya la suela: 	The analysis asks at how many fps it was recorded and then you tap the floor where the sole rests: 
+la app marca el despegue y el aterrizaje sola.	the app marks takeoff and landing by itself.
+WhatsApp y otras apps de mensajes suelen comprimir el video y bajarlo a 30 fps. Para medir con cámara lenta, 	WhatsApp and other messaging apps usually compress the video and reduce it to 30 fps. To measure in slow motion, 
+comparte el archivo original desde la galería o envíalo como documento.	share the original file from the gallery or send it as a document.
+No se pudo leer el video compartido.	The shared video could not be read.
+Video listo	Video ready
+cuadros/s en el archivo	frames/s in the file
+Analizar	Analyze
+Plataforma de fuerza	Force plate
+Otra app o sistema	Other app or system
+Pares:	Pairs:
+Sesgo (AVD − referencia):	Bias (AVD − reference):
+DE de las diferencias:	SD of the differences:
+Límites de acuerdo 95 %:	95 % limits of agreement:
+Error típico:	Typical error:
+Correlación r:	Correlation r:
+Regresión: referencia =	Regression: reference =
+× AVD	× AVD
+cm (error	cm (error
+Sesgo proporcional: pendiente	Proportional bias: slope
+la diferencia cambia con la altura: conviene la corrección lineal	the difference changes with height: the linear correction is advisable
+excelente	excellent
+moderada	moderate
+altura = medida	height = measured
+× medida	× measured
+altura =	height =
+pares,	pairs,
+Faltan pares para el gráfico	Not enough pairs for the chart
+AVD jump (cm)	AVD jump (cm)
+Media de los dos (cm)	Mean of both (cm)
+Mide los mismos saltos con AVD jump y con un instrumento de referencia (plataforma de fuerza, My Jump Lab u otro). 	Measure the same jumps with AVD jump and with a reference instrument (force plate, My Jump Lab or other). 
+Con 15–30 pares se ve cuánto se parecen (Bland-Altman) y, si quieres, se corrige la diferencia.	With 15–30 pairs you can see how closely they agree (Bland-Altman) and, if you want, correct the difference.
+Método de AVD jump	AVD jump method
+Todos los métodos	All methods
+Añadir par de un salto	Add pair from a jump
+Pegar lista	Paste list
+Mide un salto con AVD jump mientras la referencia mide el mismo salto. Luego elige el salto aquí y escribe el valor de la referencia.	Measure a jump with AVD jump while the reference measures the same jump. Then pick the jump here and enter the reference value.
+Acuerdo	Agreement
+AVD vs referencia	AVD vs reference
+Línea naranja: sesgo. Líneas punteadas: límites de acuerdo (95 % de las diferencias). 	Orange line: bias. Dotted lines: limits of agreement (95 % of the differences). 
+En la dispersión, la punteada es la igualdad y la naranja la regresión.	In the scatter plot, the dotted line is identity and the orange one the regression.
+Compartir datos y resultados	Share data and results
+Pares (mantén pulsado para borrar)	Pairs (long-press to delete)
+Hacen falta al menos 3 pares (recomendado 15–30).	At least 3 pairs are needed (15–30 recommended).
+Todavía no hay pares.	No pairs yet.
+ref.	ref.
+dif.	diff.
+¿Borrar este par?	Delete this pair?
+Calibración (opcional)	Calibration (optional)
+Elige un método arriba: la corrección se guarda por método.	Choose a method above: the correction is stored per method.
+Sin corrección: se guarda la altura medida.	No correction: the measured height is saved.
+Activa:	Active:
+Corregir solo el sesgo	Correct bias only
+Corrección lineal	Linear correction
+Con menos de 20 pares conviene corregir solo el sesgo. La corrección lineal hace falta si hay sesgo proporcional.	With fewer than 20 pairs it is better to correct only the bias. The linear correction is needed if there is proportional bias.
+Con 5 pares o más se puede corregir el sesgo; con 10 o más, también la pendiente.	With 5 or more pairs the bias can be corrected; with 10 or more, the slope too.
+Quitar la corrección	Remove the correction
+La corrección se aplica a los saltos nuevos de ese método (no a los saltos repetidos). 	The correction applies to new jumps of that method (not to repeated jumps). 
+Se guarda la altura original y la corregida. Vale solo para este teléfono y esta forma de grabar.	Both the original and the corrected height are saved. It is valid only for this phone and this way of recording.
+Aplicar corrección a	Apply correction to
+Ejemplo: 30,0 cm medidos →	Example: 30.0 cm measured →
+40,0 cm medidos →	40.0 cm measured →
+No hay saltos simples guardados	There are no single jumps saved
+con ese método.	with that method.
+Elige el salto	Choose the jump
+Escribir valores	Enter values
+Altura de la referencia (cm)	Reference height (cm)
+Valor de la referencia	Reference value
+Escribe la altura de la referencia.	Enter the reference height.
+Altura de AVD jump sin corregir (cm)	Uncorrected AVD jump height (cm)
+Par escrito a mano	Pair entered by hand
+Faltan valores.	Values are missing.
+Una línea por salto: altura de AVD jump y de la referencia, separadas por espacio, ; o tabulador. Se puede pegar desde Excel.	One line per jump: AVD jump height and reference height, separated by a space, ; or tab. You can paste from Excel.
+Pegar lista de pares	Paste list of pairs
+Añadir	Add
+pares añadidos.	pairs added.
+Validación AVD jump	AVD jump validation
+todos los métodos	all methods
+Validación	Validation
+Aplicar	Apply
+re:\bSueño (\d)	Sleep $1
+re:\bFatiga (\d)	Fatigue $1
+re:\bEstrés (\d)	Stress $1
+re:\bDolor (\d)	Soreness $1
+re:\bBienestar (\d)	Wellness $1
