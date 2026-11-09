@@ -42,6 +42,9 @@ object AutoDetect {
     @JvmStatic var EARLY_LANDING = true
     /** Contacto por bloque conectado que sube desde el suelo (ignora sombras y reflejos). */
     @JvmStatic var BLOCKS = true
+    /** Despegue y aterrizaje con fracción de cuadro (trayectoria de la suela). */
+    @JvmStatic var SUBFRAME = true
+    @JvmStatic var SUB_H0 = 0.0
     @JvmStatic var DEBUG: ((String) -> Unit)? = null
 
     /** Geometría de la banda que leen la vista previa y el video. */
@@ -62,8 +65,20 @@ object AutoDetect {
         val events: List<Int> = emptyList(), // Saltos repetidos: despegue, aterrizaje, …
         val error: String? = null,
         val preContact: Int? = null,         // cuadros de apoyo continuo antes del (primer) despegue
-        val quality: Float = 0f              // contraste pies/fondo (0–1), para avisar si es bajo
-    )
+        val quality: Float = 0f,             // contraste pies/fondo (0–1), para avisar si es bajo
+        // Instantes con fracción de cuadro (p. ej. 1099,4): el despegue y el aterrizaje ocurren entre dos cuadros.
+        val takeoffSub: Double? = null,
+        val landingSub: Double? = null,
+        val contactSub: Double? = null,
+        val eventsSub: List<Double> = emptyList()
+    ) {
+        /** Tiempo de vuelo en cuadros (con fracción si se pudo calcular). */
+        val flightFrames: Double? get() = when {
+            takeoffSub != null && landingSub != null -> landingSub - takeoffSub
+            takeoff != null && landing != null -> (landing - takeoff).toDouble()
+            else -> null
+        }
+    }
 
     private const val E_CONTRAST = "No se distinguen los pies del fondo cerca de la línea del suelo. Pon la línea justo donde apoya la suela, con buena luz y calzado que contraste con el suelo."
     private const val E_NOFLIGHT = "No se encontró ninguna fase de vuelo. Revisa la línea del suelo o marca a mano."
@@ -365,24 +380,24 @@ object AutoDetect {
          * píxeles cambiados conectados. De pie incluye la sombra o el reflejo pegados a la suela; al despegar,
          * entre la suela y el suelo aparece una franja sin cambios y el punto más bajo sube de golpe.
          */
+        val on = BooleanArray(rows * cols)
         fun bottomOf(t: Int): Int {
             val f = c[t]
-            java.util.Arrays.fill(seen, false)
+            for (i in 0 until rows * cols) { on[i] = abs(f[i] - A[i]) > tau; seen[i] = false }
             var low = -1
             for (r0 in 0..max(0, needTop)) for (col in 0 until cols) {
                 if (!colOk[col]) continue
                 val i0 = r0 * cols + col
-                if (seen[i0] || abs(f[i0] - A[i0]) <= tau) continue
+                if (seen[i0] || !on[i0]) continue
                 var sp = 0; stack[sp++] = i0; seen[i0] = true
                 while (sp > 0) {
                     val i = stack[--sp]
-                    val r = i / cols; val cc = i % cols
-                    if (r > low) low = r
-                    fun push(j: Int) { if (!seen[j] && abs(f[j] - A[j]) > tau) { seen[j] = true; stack[sp++] = j } }
-                    if (r > 0) push(i - cols)
-                    if (r < rows - 1) push(i + cols)
-                    if (cc > 0) push(i - 1)
-                    if (cc < cols - 1) push(i + 1)
+                    val r = i / cols; val cc = i - r * cols
+                    if (r > low) { low = r; if (low == rows - 1) return low }
+                    if (r > 0) { val j = i - cols; if (on[j] && !seen[j]) { seen[j] = true; stack[sp++] = j } }
+                    if (r < rows - 1) { val j = i + cols; if (on[j] && !seen[j]) { seen[j] = true; stack[sp++] = j } }
+                    if (cc > 0) { val j = i - 1; if (on[j] && !seen[j]) { seen[j] = true; stack[sp++] = j } }
+                    if (cc < cols - 1) { val j = i + 1; if (on[j] && !seen[j]) { seen[j] = true; stack[sp++] = j } }
                 }
             }
             return low
@@ -457,6 +472,35 @@ object AutoDetect {
             return ld
         }
 
+        /*
+         * Fracción de cuadro: justo después de despegar (y justo antes de aterrizar) la suela sube (o baja) casi
+         * a velocidad constante. Con la altura de su punto más bajo en los primeros cuadros en el aire se ajusta
+         * una recta y se calcula en qué instante cruzó la fila del suelo, entre el último cuadro de apoyo y el
+         * primero en el aire. A 240 fps la mejora es pequeña; a 120, 60 o 30 fps es grande.
+         */
+        fun subCross(frames: List<Int>, lo: Double, hi: Double): Double? {
+            if (!SUBFRAME || !useBlocks) return null
+            val pts = frames.filter { it in 0 until n && !raw[it] && bottoms[it] >= 0 }.map { it.toDouble() to (lineRow - bottoms[it]).toDouble() }
+            if (pts.size < 2) return null
+            val mt = pts.map { it.first }.average(); val mh = pts.map { it.second }.average()
+            var sxy = 0.0; var sxx = 0.0
+            for ((x, y) in pts) { sxy += (x - mt) * (y - mh); sxx += (x - mt) * (x - mt) }
+            if (sxx <= 0) return null
+            val b = sxy / sxx
+            if (abs(b) < 0.2) return null
+            val cross = mt + (SUB_H0 - mh) / b
+            return cross.coerceIn(lo, hi)
+        }
+        fun subTakeoff(to: Int): Double? {
+            val k = max(2, (0.02 * fps).roundToInt())
+            val r = subCross((to until to + k).toList(), to - 1.0, to.toDouble()) ?: return null
+            return r
+        }
+        fun subLanding(ld: Int): Double? {
+            val k = max(2, (0.02 * fps).roundToInt())
+            return subCross((ld - k until ld).toList(), ld - 1.0, ld.toDouble())
+        }
+
         val minFlight = max(2, (0.10 * fps).roundToInt())
         val maxFlight = (1.10 * fps).roundToInt()
         val rs = runs(contact)
@@ -481,7 +525,9 @@ object AutoDetect {
             TestType.RJ -> {
                 val ev = mutableListOf<Int>()
                 flights.forEach { (_, r) -> ev.add(r.start); ev.add(refineLanding(earlyLanding(r.end + 1, r.start))) }
-                Result(events = ev, preContact = rs.getOrNull(flights.first().index - 1)?.len, quality = quality)
+                val evSub = ev.mapIndexed { i, e -> (if (i % 2 == 0) subTakeoff(e) else subLanding(e)) ?: e.toDouble() }
+                Result(events = ev, preContact = rs.getOrNull(flights.first().index - 1)?.len, quality = quality,
+                    eventsSub = if (SUBFRAME && useBlocks) evSub else emptyList())
             }
             TestType.DJ -> {
                 // Vuelo precedido por un contacto que empieza después de la caída del cajón.
@@ -489,13 +535,17 @@ object AutoDetect {
                     ?: flights.maxByOrNull { it.value.len }!!
                 val prev = rs.getOrNull(f.index - 1)
                 val cIdx = if (prev != null && prev.contact && prev.start > 0) prev.start else null
-                Result(takeoff = f.value.start, landing = refineLanding(earlyLanding(f.value.end + 1, f.value.start)), contact = cIdx,
+                val ldD = refineLanding(earlyLanding(f.value.end + 1, f.value.start))
+                Result(takeoff = f.value.start, landing = ldD, contact = cIdx,
+                    takeoffSub = subTakeoff(f.value.start), landingSub = subLanding(ldD), contactSub = cIdx?.let { subLanding(it) },
                     preContact = prev?.len, quality = quality,
                     error = if (cIdx == null) "No se detectó el contacto inicial tras la caída; márcalo a mano." else null)
             }
             else -> {
                 val f = flights.maxByOrNull { it.value.len }!!
-                Result(takeoff = f.value.start, landing = refineLanding(earlyLanding(f.value.end + 1, f.value.start)),
+                val ld1 = refineLanding(earlyLanding(f.value.end + 1, f.value.start))
+                Result(takeoff = f.value.start, landing = ld1,
+                    takeoffSub = subTakeoff(f.value.start), landingSub = subLanding(ld1),
                     preContact = rs.getOrNull(f.index - 1)?.len, quality = quality)
             }
         }

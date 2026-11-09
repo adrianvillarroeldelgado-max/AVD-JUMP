@@ -594,6 +594,9 @@ class CaptureActivity : BaseActivity() {
             r.landing?.let { i.putExtra(AnalysisActivity.EX_PRESET_LANDING, it) }
             r.contact?.let { i.putExtra(AnalysisActivity.EX_PRESET_CONTACT, it) }
             if (r.events.isNotEmpty()) i.putExtra(AnalysisActivity.EX_PRESET_EVENTS, r.events.toIntArray())
+            // Fracción de cuadro: el análisis la usa mientras no se muevan esas marcas.
+            i.putExtra(AnalysisActivity.EX_PRESET_SUB, doubleArrayOf(r.takeoffSub ?: Double.NaN, r.landingSub ?: Double.NaN, r.contactSub ?: Double.NaN))
+            if (r.eventsSub.size == r.events.size && r.events.isNotEmpty()) i.putExtra(AnalysisActivity.EX_PRESET_EVENTS_SUB, r.eventsSub.toDoubleArray())
         }
         return i
     }
@@ -815,6 +818,8 @@ class CaptureActivity : BaseActivity() {
         val t = test
         val tech = Technique.enabled(this)
         work.execute {
+            val tA = SystemClock.elapsedRealtime()
+            var fastUsed = false
             var r: AutoDetect.Result? = null
             var fps = c.fps
             var flags: List<String> = emptyList()
@@ -831,6 +836,7 @@ class CaptureActivity : BaseActivity() {
                         val strips = if (range == null) src.scanStrip(AutoDetect.X0, AutoDetect.X1, AutoDetect.bandTop(g), AutoDetect.bandBottom(g), progress = {}, cancelled = { isFinishing })
                             else src.scanStrip(AutoDetect.X0, AutoDetect.X1, AutoDetect.bandTop(g), AutoDetect.bandBottom(g), progress = {}, cancelled = { isFinishing },
                                 from = range.first, to = range.last + 1)
+                        fastUsed = fastUsed || src.lastScanFast
                         val res = strips?.let { AutoDetect.detect(it, fps, t) } ?: return null
                         return if (range == null) res else res.shift(range.first)
                     }
@@ -872,9 +878,15 @@ class CaptureActivity : BaseActivity() {
                 r = null
             }
             val fpsFinal = fps; val flagsFinal = flags; val noteFinal = fpsNote
+            analysisMs = SystemClock.elapsedRealtime() - tA
+            analysisFast = fastUsed
             main.post { if (!isFinishing && !isDestroyed) onPrecise(f, fpsFinal, l, r, flagsFinal, noteFinal) }
         }
     }
+
+    /** Tiempo del último análisis a alta velocidad y si usó el decodificador rápido. */
+    @Volatile private var analysisMs = 0L
+    @Volatile private var analysisFast = false
 
     private fun onPrecise(f: File, fps: Int, l: LiveDetector.Live, r: AutoDetect.Result?,
                           flags: List<String> = emptyList(), fpsNote: String? = null) {
@@ -889,18 +901,20 @@ class CaptureActivity : BaseActivity() {
         val box = intent.getDoubleExtra(MainActivity.EX_BOX, 0.0).takeIf { it > 0 }
         val load = if (test == TestType.SJ || test == TestType.CMJ) intent.getDoubleExtra(MainActivity.EX_LOAD, 0.0) else null
         val out = when {
-            test.isRepeated -> r?.events?.takeIf { it.size >= 2 }?.let { ev ->
+            test.isRepeated -> r?.let { rr -> rr.eventsSub.takeIf { it.size == rr.events.size && it.size >= 2 } ?: rr.events.map { it.toDouble() } }
+                ?.takeIf { it.size >= 2 }?.let { ev ->
                 // Serie de saltos (sesión de grupo): vuelos y contactos desde las marcas.
                 val n = ev.size / 2
-                val flights = (0 until n).map { (ev[2 * it + 1] - ev[2 * it]).toDouble() / fps }
-                val contacts = (1 until n).map { (ev[2 * it] - ev[2 * it - 1]).toDouble() / fps }
+                val flights = (0 until n).map { (ev[2 * it + 1] - ev[2 * it]) / fps }
+                val contacts = (1 until n).map { (ev[2 * it] - ev[2 * it - 1]) / fps }
                 JumpCalc.repeated(athleteName(), flights, contacts, mass, fps, test)?.let { j ->
                     JumpCalc.Out(j, fmt("%d saltos · altura media %.1f cm", n, j.heightCm) +
                         (j.rsi?.let { fmt(" · RSI %.2f", it) } ?: "") + (j.contactMs?.let { fmt(" · contacto %.0f ms", it) } ?: ""))
                 }
             }
             r?.takeoff != null && r.landing != null ->
-                JumpCalc.single(this, test, athleteName(), fps, r.takeoff, r.landing, r.contact, mass, box, load)
+                JumpCalc.single(this, test, athleteName(), fps, r.takeoff, r.landing, r.contact, mass, box, load,
+                    r.takeoffSub, r.landingSub, r.contactSub)
             else -> null
         }
 
@@ -932,7 +946,8 @@ class CaptureActivity : BaseActivity() {
         info.text = "Salto medido."
         val warn = (listOfNotNull(fpsNote) + flags).joinToString("") { "\n⚠ $it" }
         val bigTxt = if (test.isRepeated && out.jump.rsi != null) fmt("RSI %.2f", out.jump.rsi) else fmt("%.1f cm", out.jump.heightCm)
-        showCard(status, bigTxt, if (flags.isEmpty()) 0xFFFFFFFF.toInt() else 0xFFFFC04D.toInt(), out.detail + warn)
+        val speed = fmt("\nAnálisis: %.1f s", analysisMs / 1000.0) + if (analysisFast) " (decodificador rápido)" else ""
+        showCard(status, bigTxt, if (flags.isEmpty()) 0xFFFFFFFF.toInt() else 0xFFFFC04D.toInt(), out.detail + speed + warn)
         // Resultado en voz alta y en grande.
         val said = when {
             test.isRepeated && out.jump.rsi != null -> "RSI " + Voice.num(this, out.jump.rsi, 2)

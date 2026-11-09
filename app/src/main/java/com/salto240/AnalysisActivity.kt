@@ -35,6 +35,8 @@ class AnalysisActivity : BaseActivity() {
         const val EX_PRESET_LANDING = "presetLanding"
         const val EX_PRESET_CONTACT = "presetContact"
         const val EX_PRESET_EVENTS = "presetEvents"
+        const val EX_PRESET_SUB = "presetSub"
+        const val EX_PRESET_EVENTS_SUB = "presetEventsSub"
         /** Id de un salto ya guardado que se vuelve a medir: al guardar se actualiza en lugar de crear otro. */
         const val EX_EDIT_ID = "editJumpId"
     }
@@ -56,6 +58,18 @@ class AnalysisActivity : BaseActivity() {
 
     private var frame = 0
     private val marks = mutableMapOf<String, Int>()
+    /** Marcas automáticas con fracción de cuadro: (cuadro entero, posición exacta). Valen mientras no se muevan. */
+    private val autoSub = mutableMapOf<String, Pair<Int, Double>>()
+    private var autoEvSub: List<Pair<Int, Double>> = emptyList()
+    private fun pos(key: String): Double {
+        val m = marks[key] ?: return Double.NaN
+        return autoSub[key]?.takeIf { it.first == m }?.second ?: m.toDouble()
+    }
+    private fun evPos(i: Int): Double {
+        val e = events[i]
+        return autoEvSub.getOrNull(i)?.takeIf { it.first == e }?.second ?: e.toDouble()
+    }
+    private fun frames(v: Double) = if (abs(v - Math.round(v)) < 0.05) fmt("%d", Math.round(v)) else fmt("%.1f", v)
     /** Saltos repetidos: despegue, aterrizaje, despegue, aterrizaje… */
     private val events = mutableListOf<Int>()
     private var current: Jump? = null
@@ -137,7 +151,11 @@ class AnalysisActivity : BaseActivity() {
         val ld = intent.getIntExtra(EX_PRESET_LANDING, -1).takeIf { it >= 0 }
         val c = intent.getIntExtra(EX_PRESET_CONTACT, -1).takeIf { it >= 0 }
         if (ev.isEmpty() && (to == null || ld == null)) return null
+        val sub = intent.getDoubleArrayExtra(EX_PRESET_SUB)
+        fun sv(k: Int) = sub?.getOrNull(k)?.takeIf { !it.isNaN() }
+        val evSub = intent.getDoubleArrayExtra(EX_PRESET_EVENTS_SUB)?.toList() ?: emptyList()
         return AutoDetect.Result(takeoff = to, landing = ld, contact = c, events = ev,
+            takeoffSub = sv(0), landingSub = sv(1), contactSub = sv(2), eventsSub = evSub,
             error = if (test.isDrop && c == null && ev.isEmpty()) "No se detectó el contacto inicial tras la caída; márcalo a mano." else null)
     }
 
@@ -382,25 +400,25 @@ class AnalysisActivity : BaseActivity() {
             fail(if (test.isDrop) "Marca contacto inicial, despegue y aterrizaje." else "Marca el despegue y el aterrizaje.")
             return
         }
-        val takeoff = marks["takeoff"]!!
-        val landing = marks["landing"]!!
+        val takeoff = pos("takeoff")
+        val landing = pos("landing")
         val flightFrames = landing - takeoff
         if (flightFrames <= 0) { fail("El aterrizaje debe estar después del despegue."); return }
-        val tv = flightFrames.toDouble() / capFps
+        val tv = flightFrames / capFps
         val h = Calc.heightCm(tv)
         val sb = StringBuilder()
-        sb.append(stat("Tiempo de vuelo", fmt("%.0f ms (%d cuadros)", tv * 1000, flightFrames)))
+        sb.append(stat("Tiempo de vuelo", fmt("%.0f ms (%s cuadros)", tv * 1000, frames(flightFrames))))
         sb.append(stat("Vel. despegue", fmt("%.2f m/s", Calc.takeoffVelocity(tv))))
 
         var tcMs: Double? = null
         var rsi: Double? = null
         if (test.isDrop) {
-            val contactFrames = takeoff - marks["contact"]!!
+            val contactFrames = takeoff - pos("contact")
             if (contactFrames <= 0) { fail("El despegue debe estar después del contacto inicial."); return }
-            val tc = contactFrames.toDouble() / capFps
+            val tc = contactFrames / capFps
             tcMs = tc * 1000
             rsi = Calc.rsi(h, tc)
-            sb.append(stat("Tiempo contacto", fmt("%.0f ms (%d cuadros)", tcMs, contactFrames)))
+            sb.append(stat("Tiempo contacto", fmt("%.0f ms (%s cuadros)", tcMs, frames(contactFrames))))
             sb.append(stat("RSI", fmt("%.2f", rsi)))
             if (tc > 0.25) sb.append("Contacto > 250 ms: rebote lento.\n")
         }
@@ -463,14 +481,14 @@ class AnalysisActivity : BaseActivity() {
         val sb = StringBuilder()
         sb.append(String.format("%-3s %7s %7s %7s %5s\n", "#", "cm", "TV ms", "TC ms", "RSI"))
         for (i in 0 until n) {
-            val to = events[2 * i]
-            val ld = events[2 * i + 1]
-            val tv = (ld - to).toDouble() / capFps
+            val to = evPos(2 * i)
+            val ld = evPos(2 * i + 1)
+            val tv = (ld - to) / capFps
             val h = Calc.heightCm(tv)
             heights.add(h); flights.add(tv * 1000)
             var tcTxt = "—"; var rsiTxt = "—"
             if (i > 0) {
-                val tc = (to - events[2 * i - 1]).toDouble() / capFps
+                val tc = (to - evPos(2 * i - 1)) / capFps
                 contacts.add(tc * 1000)
                 val r = Calc.rsi(h, tc)
                 rsis.add(r)
@@ -666,11 +684,16 @@ class AnalysisActivity : BaseActivity() {
 
     private fun applyAuto(r: AutoDetect.Result) {
         var placed = false
+        autoSub.clear(); autoEvSub = emptyList()
         if (isRj && r.events.isNotEmpty()) {
             events.clear(); events.addAll(r.events); placed = true
+            if (r.eventsSub.size == r.events.size) autoEvSub = r.events.zip(r.eventsSub)
         } else if (r.takeoff != null && r.landing != null) {
             marks["takeoff"] = r.takeoff
             marks["landing"] = r.landing
+            r.takeoffSub?.let { autoSub["takeoff"] = r.takeoff to it }
+            r.landingSub?.let { autoSub["landing"] = r.landing to it }
+            if (r.contact != null && r.contactSub != null) autoSub["contact"] = r.contact to r.contactSub
             if (test.isDrop) {
                 if (r.contact != null) marks["contact"] = r.contact else marks.remove("contact")
             }

@@ -965,3 +965,7 @@ Cuerpo entero dentro del recuadro, en diagonal (unos 45°).	Whole body inside th
 Quieto 1 s, salta y quédate quieto al aterrizar. Puedes saltar las veces que quieras.	Stand still 1 s, jump and stay still on landing. You can jump as many times as you want.
 Quieto 1 s, salta seguido y al terminar quédate quieto 2 s.	Stand still 1 s, jump continuously and when finished stay still 2 s.
 Primero quieto en el suelo 1 s, luego sube al cajón, déjate caer y rebota.	First stand still on the floor for 1 s, then step onto the box, drop down and rebound.
+Análisis:	Analysis:
+(decodificador rápido)	(fast decoder)
+Medido a	Measured at
+fps con fracción de cuadro (±	fps with sub-frame timing (±

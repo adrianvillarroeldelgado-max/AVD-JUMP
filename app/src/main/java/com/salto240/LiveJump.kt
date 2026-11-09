@@ -125,7 +125,11 @@ fun AutoDetect.Result.shift(off: Int) = copy(
     takeoff = takeoff?.plus(off),
     landing = landing?.plus(off),
     contact = contact?.plus(off),
-    events = events.map { it + off }
+    events = events.map { it + off },
+    takeoffSub = takeoffSub?.plus(off),
+    landingSub = landingSub?.plus(off),
+    contactSub = contactSub?.plus(off),
+    eventsSub = eventsSub.map { it + off }
 )
 
 /** Cálculo de un salto simple a partir de las marcas en cuadros (lo comparten el análisis y el modo en vivo). */
@@ -138,18 +142,24 @@ object JumpCalc {
     fun single(
         ctx: Context, test: TestType, athlete: String, fps: Int,
         takeoff: Int, landing: Int, contact: Int?,
-        mass: Double?, box: Double?, load: Double?
+        mass: Double?, box: Double?, load: Double?,
+        takeoffSub: Double? = null, landingSub: Double? = null, contactSub: Double? = null
     ): Out? {
-        val flightFrames = landing - takeoff
+        // Con fracción de cuadro si la detección la calculó (despegue y aterrizaje entre dos cuadros).
+        val toF = takeoffSub ?: takeoff.toDouble()
+        val ldF = landingSub ?: landing.toDouble()
+        val flightFrames = ldF - toF
         if (flightFrames <= 0) return null
         var tc: Double? = null
         if (test.isDrop) {
             val c = contact ?: return null
-            tc = (takeoff - c).toDouble() / fps
+            tc = (toF - (contactSub ?: c.toDouble())) / fps
             if (tc <= 0) return null
         }
-        return fromFlight(test, athlete, flightFrames.toDouble() / fps, tc, mass, box, load, fps,
-            f("Medido a %d fps · ±1 cuadro = ±%.1f ms", fps, 1000.0 / fps))
+        val sub = takeoffSub != null && landingSub != null
+        return fromFlight(test, athlete, flightFrames / fps, tc, mass, box, load, fps,
+            if (sub) f("Medido a %d fps con fracción de cuadro (±%.1f ms)", fps, 250.0 / fps)
+            else f("Medido a %d fps · ±1 cuadro = ±%.1f ms", fps, 1000.0 / fps))
     }
 
     /** Salto a partir del tiempo de vuelo (s) y, en Drop Jump, del contacto (s). Lo usa también el modo IA. */

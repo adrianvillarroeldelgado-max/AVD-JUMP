@@ -878,3 +878,6 @@ Cuerpo entero dentro del recuadro, en diagonal (unos 45°).	Corpo inteiro dentro
 Quieto 1 s, salta y quédate quieto al aterrizar. Puedes saltar las veces que quieras.	Parado 1 s, salte e fique parado ao aterrissar. Pode saltar quantas vezes quiser.
 Quieto 1 s, salta seguido y al terminar quédate quieto 2 s.	Parado 1 s, salte seguido e ao terminar fique parado 2 s.
 Primero quieto en el suelo 1 s, luego sube al cajón, déjate caer y rebota.	Primeiro parado no chão 1 s, depois suba na caixa, deixe-se cair e rebata.
+Análisis:	Análise:
+(decodificador rápido)	(decodificador rápido)
+fps con fracción de cuadro (±	fps com fração de quadro (±
