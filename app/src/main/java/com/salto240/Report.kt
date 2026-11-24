@@ -75,13 +75,13 @@ object Report {
         val rg = RadioGroup(act)
         PROBLEMS.forEachIndexed { i, p -> rg.addView(RadioButton(act).apply { id = 1000 + i; text = p; setTextColor(Col.INK) }) }
         rg.check(1000)
-        box.addView(rg, act.lp())
+        box.addView(rg, lp())
         val ref = act.input("Altura real o de la referencia (cm, opcional)", numeric = true)
-        box.addView(ref, act.lp())
+        box.addView(ref, lp())
         val note = EditText(act).apply { hint = "Comentario (opcional)"; minLines = 2 }
-        box.addView(note, act.lp())
+        box.addView(note, lp())
         val withVideo = CheckBox(act).apply { text = "Incluir el video"; isChecked = video != null; isEnabled = video != null; setTextColor(Col.INK) }
-        box.addView(withVideo, act.lp())
+        box.addView(withVideo, lp())
         Dlg(act).setTitle("Reportar medición").setView(android.widget.ScrollView(act).apply { addView(box) })
             .setPositiveButton("Crear reporte") { _, _ ->
                 val problem = PROBLEMS.getOrElse(rg.checkedRadioButtonId - 1000) { PROBLEMS.last() }

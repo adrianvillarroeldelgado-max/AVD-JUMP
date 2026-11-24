@@ -1111,3 +1111,175 @@ re:\bSueño (\d)	Sono $1
 re:\bFatiga (\d)	Fadiga $1
 re:\bEstrés (\d)	Estresse $1
 re:\bDolor (\d)	Dor $1
+
+# 1.6.14: reporte, diagnóstico, carga, sincronización, imagen, pestañas
+Reportar medición	Reportar medição
+Reportar	Reportar
+Imagen	Imagem
+Todavía no hay un salto medido.	Ainda não há um salto medido.
+Día	Dia
+Esfuerzo percibido de la sesión (0–10)	Esforço percebido da sessão (0–10)
+Minutos de la sesión	Minutos da sessão
+Pregunta unos 30 minutos después de terminar: «¿Qué tan dura fue la sesión?»	Pergunte uns 30 minutos depois de terminar: «Quão dura foi a sessão?»
+Escribe los minutos.	Escreva os minutos.
+¿Qué grupo?	Qual grupo?
+El grupo no tiene clientes.	O grupo não tem clientes.
+Esfuerzo de cada atleta (0–10). «—» = no entrenó.	Esforço de cada atleta (0–10). «—» = não treinou.
+Sesión del grupo	Sessão do grupo
+sesiones guardadas.	sessões salvas.
+Carga y ACWR	Carga e ACWR
+CMJ (cm)	CMJ (cm)
+Bienestar (4–20)	Bem-estar (4–20)
+Panel del atleta	Painel do atleta
+Últimas 6 semanas	Últimas 6 semanas
+Barras: carga diaria (esfuerzo × minutos). Línea naranja: relación aguda:crónica; franja verde 0,8–1,3.	Barras: carga diária (esforço × minutos). Linha laranja: relação aguda:crônica; faixa verde 0,8–1,3.
+Puntos azules: mejor CMJ del día; franja: su media ± 1 DE. Abajo: bienestar.	Pontos azuis: melhor CMJ do dia; faixa: média ± 1 DP. Abaixo: bem-estar.
++ Sesión	+ Sessão
+Sesiones (mantén pulsado para borrar)	Sessões (mantenha pressionado para apagar)
+Carga por sesión (Foster): esfuerzo percibido 0–10 × minutos. Relación aguda:crónica con medias exponenciales	Carga por sessão (Foster): esforço percebido 0–10 × minutos. Relação aguda:crônica com médias exponenciais
+de 7 y 28 días; necesita 3 semanas de registros. Por encima de 1,5 la carga subió de golpe. Monotonía = media / DE de la carga	de 7 e 28 dias; precisa de 3 semanas de registros. Acima de 1,5 a carga subiu de repente. Monotonia = média / DP da carga
+diaria de la semana; más de 2 indica entrenamientos muy parecidos todos los días.	diária da semana; mais de 2 indica treinos muito parecidos todos os dias.
+Carga · semana	Carga · semana
+monotonía	monotonia
+Monotonía	Monotonia
+Sin sesiones registradas.	Sem sessões registradas.
+Todavía no hay sesiones.	Ainda não há sessões.
+re:\besfuerzo (\d+) × (\d+) min	esforço $1 × $2 min
+¿Borrar esta sesión?	Apagar esta sessão?
+Esfuerzo (0-10)	Esforço (0-10)
+Carga (UA)	Carga (UA)
+Carga semanal (UA)	Carga semanal (UA)
+Minutos	Minutos
+Tipo	Tipo
+Entrenamiento	Treino
+Partido o competencia	Jogo ou competição
+Gimnasio	Academia
+Recuperación	Recuperação
+Otro	Outro
+0 · Reposo	0 · Repouso
+1 · Muy, muy fácil	1 · Muito, muito fácil
+2 · Fácil	2 · Fácil
+3 · Moderado	3 · Moderado
+4 · Algo duro	4 · Um pouco duro
+5 · Duro	5 · Duro
+6 · Duro	6 · Duro
+7 · Muy duro	7 · Muito duro
+8 · Muy duro	8 · Muito duro
+9 · Muy duro	9 · Muito duro
+10 · Máximo	10 · Máximo
+Faltan datos: la relación aguda:crónica necesita 3 semanas de registros	Faltam dados: a relação aguda:crônica precisa de 3 semanas de registros
+Subida brusca de la carga: más riesgo de lesión. Conviene moderar.	Subida brusca da carga: mais risco de lesão. Convém moderar.
+La carga está subiendo rápido.	A carga está subindo rápido.
+Carga baja respecto de las últimas semanas (puede perder forma).	Carga baixa em relação às últimas semanas (pode perder a forma).
+Carga en la zona habitual.	Carga na zona habitual.
+Monotonía alta: varía la carga entre días.	Monotonia alta: varie a carga entre os dias.
+Carga: semana	Carga: semana
+Panel	Painel
+Medir	Medir
+Atletas	Atletas
+Equipo	Equipe
+Seguimiento del cliente	Acompanhamento do cliente
+Panel del atleta (carga, CMJ y bienestar)	Painel do atleta (carga, CMJ e bem-estar)
+Registrar sesión de entrenamiento	Registrar sessão de treino
+Resultados	Resultados
+Historial de saltos	Histórico de saltos
+Disposición diaria (salto, bienestar y carga)	Prontidão diária (salto, bem-estar e carga)
+Registrar sesión del grupo (carga)	Registrar sessão do grupo (carga)
+Sincronizar teléfonos (carpeta compartida)	Sincronizar telefones (pasta compartilhada)
+Diagnóstico del teléfono	Diagnóstico do telefone
+Experimental	Experimental
+Funciones en prueba: conviene validarlas con Validación y calibración antes de usarlas para decidir.	Funções em teste: convém validá-las com Validação e calibração antes de usá-las para decidir.
+Sincronización entre teléfonos: desactivada	Sincronização entre telefones: desativada
+Sincronizado:	Sincronizado:
+✓ Cámara lenta a 240 fps disponible para la app.	✓ Câmera lenta a 240 fps disponível para o app.
+◐ Cámara lenta hasta	◐ Câmera lenta até
+fps (no 240). Sirve; el error por cuadro es el doble.	fps (não 240). Serve; o erro por quadro é o dobro.
+✗ El teléfono no ofrece cámara lenta a otras apps (máx.	✗ O telefone não oferece câmera lenta a outros apps (máx.
+fps). Graba con la cámara del sistema en cámara lenta y usa «Analizar video».	fps). Grave com a câmera do sistema em câmera lenta e use «Analisar vídeo».
+✓ Última grabación:	✓ Última gravação:
+fps reales.	fps reais.
+✗ Última grabación: pidió	✗ Última gravação: pediu
+fps y grabó	fps e gravou
+. Se mide con los fps reales.	. Mede-se com os fps reais.
+✗ No se pudo probar la IA (ML Kit).	✗ Não foi possível testar a IA (ML Kit).
+✓ IA rápida: unos	✓ IA rápida: cerca de
+análisis por segundo	análises por segundo
+medido en la cámara	medido na câmera
+◐ IA media: unos	◐ IA média: cerca de
+análisis por segundo. Error esperado de 2–4 cm.	análises por segundo. Erro esperado de 2–4 cm.
+✗ IA lenta: unos	✗ IA lenta: cerca de
+análisis por segundo. Error de más de 5 cm: usa 240 fps.	análises por segundo. Erro acima de 5 cm: use 240 fps.
+✗ Sin acelerómetro.	✗ Sem acelerômetro.
+✓ Acelerómetro a	✓ Acelerômetro a
+muestras por segundo: sirve para la curva de fuerza.	amostras por segundo: serve para a curva de força.
+◐ Acelerómetro a	◐ Acelerômetro a
+muestras por segundo: curva de fuerza con más error.	amostras por segundo: curva de força com mais erro.
+✗ Acelerómetro a	✗ Acelerômetro a
+muestras por segundo: no alcanza para la curva de fuerza.	amostras por segundo: não basta para a curva de força.
+⚠ Queda poco espacio	⚠ Resta pouco espaço
+MB). Cada video de 240 fps ocupa 10–40 MB.	MB). Cada vídeo de 240 fps ocupa 10–40 MB.
+Recomendado: cámara lenta 240 fps de costado para CMJ, SJ y Drop Jump. IA en vivo para sesiones de grupo rápidas.	Recomendado: câmera lenta 240 fps de lado para CMJ, SJ e Drop Jump. IA ao vivo para sessões de grupo rápidas.
+Recomendado: cámara lenta a	Recomendado: câmera lenta a
+fps de costado.	fps de lado.
+La IA también va bien en este teléfono.	A IA também funciona bem neste telefone.
+Recomendado: IA en vivo en diagonal (45°), o grabar en cámara lenta con la cámara del sistema y analizar el video.	Recomendado: IA ao vivo na diagonal (45°), ou gravar em câmera lenta com a câmera do sistema e analisar o vídeo.
+Recomendado: grabar en cámara lenta con la cámara del sistema y usar «Analizar video».	Recomendado: gravar em câmera lenta com a câmera do sistema e usar «Analisar vídeo».
+Comprueba qué puede medir este teléfono: cámara lenta, velocidad de la IA y acelerómetro. Deja el teléfono quieto unos segundos.	Verifica o que este telefone pode medir: câmera lenta, velocidade da IA e acelerômetro. Deixe o telefone parado alguns segundos.
+Probando…	Testando…
+Modelo:	Modelo:
+Repetir diagnóstico	Repetir diagnóstico
+No se pudo completar el diagnóstico.	Não foi possível concluir o diagnóstico.
+Modos de cámara lenta:	Modos de câmera lenta:
+ninguno	nenhum
+ms por imagen de prueba.	ms por imagem de teste.
+Resultado	Resultado
+El despegue quedó mal marcado	A decolagem ficou mal marcada
+El aterrizaje quedó mal marcado	A aterrissagem ficou mal marcada
+La altura no coincide con la referencia	A altura não coincide com a referência
+Contó un salto que no hice	Contou um salto que não fiz
+No detectó el salto	Não detectou o salto
+Otro problema	Outro problema
+¿Qué salió mal? El reporte lleva el video y los datos de la medición para poder ajustar la detección.	O que deu errado? O relatório leva o vídeo e os dados da medição para ajustar a detecção.
+Altura real o de la referencia (cm, opcional)	Altura real ou da referência (cm, opcional)
+Comentario (opcional)	Comentário (opcional)
+Incluir el video	Incluir o vídeo
+Crear reporte	Criar relatório
+Preparando el reporte…	Preparando o relatório…
+No se pudo crear el reporte.	Não foi possível criar o relatório.
+Reporte de medición AVD jump	Relatório de medição AVD jump
+Reporte de medición de AVD jump	Relatório de medição do AVD jump
+Compartir imagen del resultado	Compartilhar imagem do resultado
+No se pudo crear la imagen.	Não foi possível criar a imagem.
+Resultado AVD jump	Resultado AVD jump
+%d días	%d dias
+¡Mejor marca personal!	Recorde pessoal!
+frente a su media	em relação à média
+Cámara lenta 240 fps	Câmera lenta 240 fps
+Análisis de video	Análise de vídeo
+Medido con AVD jump	Medido com AVD jump
+No hay otros teléfonos en la carpeta todavía. Tus datos ya están ahí.	Ainda não há outros telefones na pasta. Seus dados já estão lá.
+teléfono(s) · saltos nuevos	telefone(s) · saltos novos
+actualizados	atualizados
+borrados	apagados
+Elige primero la carpeta compartida.	Escolha primeiro a pasta compartilhada.
+No se pudo crear el archivo en la carpeta.	Não foi possível criar o arquivo na pasta.
+No se pudo escribir en la carpeta.	Não foi possível escrever na pasta.
+Sincronizar teléfonos	Sincronizar telefones
+Para medir con dos o más teléfonos (entrenador y ayudante) y ver los mismos datos.	Para medir com dois ou mais telefones (treinador e assistente) e ver os mesmos dados.
+Cada teléfono elige la misma carpeta compartida, por ejemplo una carpeta de Google Drive.	Cada telefone escolhe a mesma pasta compartilhada, por exemplo uma pasta do Google Drive.
+Se sincroniza al abrir la app (cada 10 minutos como mucho) y con el botón.	Sincroniza ao abrir o app (no máximo a cada 10 minutos) e com o botão.
+Elegir carpeta compartida	Escolher pasta compartilhada
+No hay un selector de carpetas en este teléfono.	Não há seletor de pastas neste telefone.
+Sincronizar ahora	Sincronizar agora
+Dejar de sincronizar	Parar de sincronizar
+Qué se comparte: clientes, grupos, saltos, bienestar, sesiones de carga y pares de validación.	O que se compartilha: clientes, grupos, saltos, bem-estar, sessões de carga e pares de validação.
+Los videos no viajan (ocupan mucho): el salto llega sin video. Si se edita el mismo salto en dos teléfonos, queda el cambio más reciente.	Os vídeos não viajam (ocupam muito): o salto chega sem vídeo. Se o mesmo salto for editado em dois telefones, fica a alteração mais recente.
+Los borrados también se comparten.	As exclusões também são compartilhadas.
+Con Google Drive: instala la app de Drive y, en el selector, elige Drive y una carpeta.	Com o Google Drive: instale o app do Drive e, no seletor, escolha Drive e uma pasta.
+Todos los teléfonos deben usar la misma cuenta o una carpeta compartida entre las cuentas.	Todos os telefones devem usar a mesma conta ou uma pasta compartilhada entre as contas.
+Sin carpeta: no se sincroniza.	Sem pasta: não sincroniza.
+Carpeta:	Pasta:
+Última sincronización:	Última sincronização:
+Este teléfono:	Este telefone:
+Sincronizando…	Sincronizando…
+No se pudo sincronizar:	Não foi possível sincronizar:

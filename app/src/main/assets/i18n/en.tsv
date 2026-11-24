@@ -1200,3 +1200,173 @@ re:\bFatiga (\d)	Fatigue $1
 re:\bEstrés (\d)	Stress $1
 re:\bDolor (\d)	Soreness $1
 re:\bBienestar (\d)	Wellness $1
+
+# 1.6.14: reporte, diagnóstico, carga, sincronización, imagen, pestañas
+Reportar medición	Report measurement
+Reportar	Report
+Imagen	Image
+Todavía no hay un salto medido.	No jump has been measured yet.
+Día	Day
+Esfuerzo percibido de la sesión (0–10)	Session perceived exertion (0–10)
+Minutos de la sesión	Session minutes
+Pregunta unos 30 minutos después de terminar: «¿Qué tan dura fue la sesión?»	Ask about 30 minutes after finishing: «How hard was the session?»
+Escribe los minutos.	Enter the minutes.
+¿Qué grupo?	Which group?
+El grupo no tiene clientes.	The group has no clients.
+Esfuerzo de cada atleta (0–10). «—» = no entrenó.	Each athlete's exertion (0–10). «—» = did not train.
+Sesión del grupo	Group session
+sesiones guardadas.	sessions saved.
+Carga y ACWR	Load and ACWR
+CMJ (cm)	CMJ (cm)
+Bienestar (4–20)	Wellness (4–20)
+Panel del atleta	Athlete dashboard
+Últimas 6 semanas	Last 6 weeks
+Barras: carga diaria (esfuerzo × minutos). Línea naranja: relación aguda:crónica; franja verde 0,8–1,3.	Bars: daily load (exertion × minutes). Orange line: acute:chronic ratio; green band 0.8–1.3.
+Puntos azules: mejor CMJ del día; franja: su media ± 1 DE. Abajo: bienestar.	Blue dots: best CMJ of the day; band: mean ± 1 SD. Bottom: wellness.
++ Sesión	+ Session
+Sesiones (mantén pulsado para borrar)	Sessions (long-press to delete)
+Carga por sesión (Foster): esfuerzo percibido 0–10 × minutos. Relación aguda:crónica con medias exponenciales	Session load (Foster): perceived exertion 0–10 × minutes. Acute:chronic ratio with exponential averages
+de 7 y 28 días; necesita 3 semanas de registros. Por encima de 1,5 la carga subió de golpe. Monotonía = media / DE de la carga	of 7 and 28 days; needs 3 weeks of records. Above 1.5 the load rose abruptly. Monotony = mean / SD of the
+diaria de la semana; más de 2 indica entrenamientos muy parecidos todos los días.	week's daily load; above 2 means very similar sessions every day.
+Carga · semana	Load · week
+monotonía	monotony
+Monotonía	Monotony
+Sin sesiones registradas.	No sessions recorded.
+Todavía no hay sesiones.	No sessions yet.
+re:\besfuerzo (\d+) × (\d+) min	exertion $1 × $2 min
+¿Borrar esta sesión?	Delete this session?
+Esfuerzo (0-10)	Exertion (0-10)
+Carga (UA)	Load (AU)
+Carga semanal (UA)	Weekly load (AU)
+Minutos	Minutes
+Tipo	Type
+Entrenamiento	Training
+Partido o competencia	Match or competition
+Gimnasio	Gym
+Recuperación	Recovery
+Otro	Other
+0 · Reposo	0 · Rest
+1 · Muy, muy fácil	1 · Very, very easy
+2 · Fácil	2 · Easy
+3 · Moderado	3 · Moderate
+4 · Algo duro	4 · Somewhat hard
+5 · Duro	5 · Hard
+6 · Duro	6 · Hard
+7 · Muy duro	7 · Very hard
+8 · Muy duro	8 · Very hard
+9 · Muy duro	9 · Very hard
+10 · Máximo	10 · Maximal
+Faltan datos: la relación aguda:crónica necesita 3 semanas de registros	Not enough data: the acute:chronic ratio needs 3 weeks of records
+Subida brusca de la carga: más riesgo de lesión. Conviene moderar.	Sharp rise in load: higher injury risk. Better to ease off.
+La carga está subiendo rápido.	Load is rising quickly.
+Carga baja respecto de las últimas semanas (puede perder forma).	Load is low compared with recent weeks (fitness may drop).
+Carga en la zona habitual.	Load within the usual range.
+Monotonía alta: varía la carga entre días.	High monotony: vary the load between days.
+Carga: semana	Load: week
+Panel	Dashboard
+Atletas	Athletes
+Equipo	Team
+Seguimiento del cliente	Client monitoring
+Panel del atleta (carga, CMJ y bienestar)	Athlete dashboard (load, CMJ and wellness)
+Registrar sesión de entrenamiento	Log training session
+Resultados	Results
+Historial de saltos	Jump history
+Disposición diaria (salto, bienestar y carga)	Daily readiness (jump, wellness and load)
+Registrar sesión del grupo (carga)	Log group session (load)
+Sincronizar teléfonos (carpeta compartida)	Sync phones (shared folder)
+Diagnóstico del teléfono	Phone diagnostics
+Experimental	Experimental
+Funciones en prueba: conviene validarlas con Validación y calibración antes de usarlas para decidir.	Features under test: validate them with Validation and calibration before using them for decisions.
+Sincronización entre teléfonos: desactivada	Sync between phones: off
+Sincronizado:	Synced:
+✓ Cámara lenta a 240 fps disponible para la app.	✓ 240 fps slow motion available to the app.
+◐ Cámara lenta hasta	◐ Slow motion up to
+fps (no 240). Sirve; el error por cuadro es el doble.	fps (not 240). It works; the per-frame error is double.
+✗ El teléfono no ofrece cámara lenta a otras apps (máx.	✗ The phone does not offer slow motion to other apps (max.
+fps). Graba con la cámara del sistema en cámara lenta y usa «Analizar video».	fps). Record with the system camera in slow motion and use «Analyze video».
+✓ Última grabación:	✓ Last recording:
+fps reales.	real fps.
+✗ Última grabación: pidió	✗ Last recording: requested
+fps y grabó	fps and recorded
+. Se mide con los fps reales.	. The real fps are used.
+✗ No se pudo probar la IA (ML Kit).	✗ The AI (ML Kit) could not be tested.
+✓ IA rápida: unos	✓ Fast AI: about
+análisis por segundo	analyses per second
+medido en la cámara	measured in the camera
+◐ IA media: unos	◐ Medium AI: about
+análisis por segundo. Error esperado de 2–4 cm.	analyses per second. Expected error 2–4 cm.
+✗ IA lenta: unos	✗ Slow AI: about
+análisis por segundo. Error de más de 5 cm: usa 240 fps.	analyses per second. Error above 5 cm: use 240 fps.
+✗ Sin acelerómetro.	✗ No accelerometer.
+✓ Acelerómetro a	✓ Accelerometer at
+muestras por segundo: sirve para la curva de fuerza.	samples per second: good for the force curve.
+◐ Acelerómetro a	◐ Accelerometer at
+muestras por segundo: curva de fuerza con más error.	samples per second: force curve with more error.
+✗ Acelerómetro a	✗ Accelerometer at
+muestras por segundo: no alcanza para la curva de fuerza.	samples per second: not enough for the force curve.
+⚠ Queda poco espacio	⚠ Little storage left
+MB). Cada video de 240 fps ocupa 10–40 MB.	MB). Each 240 fps video takes 10–40 MB.
+Recomendado: cámara lenta 240 fps de costado para CMJ, SJ y Drop Jump. IA en vivo para sesiones de grupo rápidas.	Recommended: 240 fps slow motion from the side for CMJ, SJ and Drop Jump. Live AI for quick group sessions.
+Recomendado: cámara lenta a	Recommended: slow motion at
+fps de costado.	fps from the side.
+La IA también va bien en este teléfono.	The AI also works well on this phone.
+Recomendado: IA en vivo en diagonal (45°), o grabar en cámara lenta con la cámara del sistema y analizar el video.	Recommended: live AI at a diagonal (45°), or record slow motion with the system camera and analyze the video.
+Recomendado: grabar en cámara lenta con la cámara del sistema y usar «Analizar video».	Recommended: record slow motion with the system camera and use «Analyze video».
+Comprueba qué puede medir este teléfono: cámara lenta, velocidad de la IA y acelerómetro. Deja el teléfono quieto unos segundos.	Checks what this phone can measure: slow motion, AI speed and accelerometer. Keep the phone still for a few seconds.
+Probando…	Testing…
+Modelo:	Model:
+Repetir diagnóstico	Run diagnostics again
+No se pudo completar el diagnóstico.	The diagnostics could not be completed.
+Modos de cámara lenta:	Slow-motion modes:
+ninguno	none
+ms por imagen de prueba.	ms per test image.
+El despegue quedó mal marcado	Takeoff was marked wrong
+El aterrizaje quedó mal marcado	Landing was marked wrong
+La altura no coincide con la referencia	Height does not match the reference
+Contó un salto que no hice	It counted a jump I did not do
+No detectó el salto	It did not detect the jump
+Otro problema	Other problem
+¿Qué salió mal? El reporte lleva el video y los datos de la medición para poder ajustar la detección.	What went wrong? The report includes the video and the measurement data so the detection can be tuned.
+Altura real o de la referencia (cm, opcional)	Actual or reference height (cm, optional)
+Comentario (opcional)	Comment (optional)
+Incluir el video	Include the video
+Crear reporte	Create report
+Preparando el reporte…	Preparing the report…
+No se pudo crear el reporte.	The report could not be created.
+Reporte de medición AVD jump	AVD jump measurement report
+Reporte de medición de AVD jump	AVD jump measurement report
+Compartir imagen del resultado	Share result image
+No se pudo crear la imagen.	The image could not be created.
+Resultado AVD jump	AVD jump result
+%d días	%d days
+¡Mejor marca personal!	Personal best!
+frente a su media	vs. their mean
+Cámara lenta 240 fps	240 fps slow motion
+Análisis de video	Video analysis
+Medido con AVD jump	Measured with AVD jump
+No hay otros teléfonos en la carpeta todavía. Tus datos ya están ahí.	There are no other phones in the folder yet. Your data is already there.
+teléfono(s) · saltos nuevos	phone(s) · new jumps
+actualizados	updated
+borrados	deleted
+Elige primero la carpeta compartida.	Choose the shared folder first.
+No se pudo crear el archivo en la carpeta.	The file could not be created in the folder.
+No se pudo escribir en la carpeta.	Could not write to the folder.
+Sincronizar teléfonos	Sync phones
+Para medir con dos o más teléfonos (entrenador y ayudante) y ver los mismos datos.	To measure with two or more phones (coach and assistant) and see the same data.
+Cada teléfono elige la misma carpeta compartida, por ejemplo una carpeta de Google Drive.	Each phone picks the same shared folder, for example a Google Drive folder.
+Se sincroniza al abrir la app (cada 10 minutos como mucho) y con el botón.	It syncs when the app opens (at most every 10 minutes) and with the button.
+Elegir carpeta compartida	Choose shared folder
+No hay un selector de carpetas en este teléfono.	There is no folder picker on this phone.
+Sincronizar ahora	Sync now
+Dejar de sincronizar	Stop syncing
+Qué se comparte: clientes, grupos, saltos, bienestar, sesiones de carga y pares de validación.	What is shared: clients, groups, jumps, wellness, load sessions and validation pairs.
+Los videos no viajan (ocupan mucho): el salto llega sin video. Si se edita el mismo salto en dos teléfonos, queda el cambio más reciente.	Videos are not transferred (too large): the jump arrives without video. If the same jump is edited on two phones, the most recent change wins.
+Los borrados también se comparten.	Deletions are shared too.
+Con Google Drive: instala la app de Drive y, en el selector, elige Drive y una carpeta.	With Google Drive: install the Drive app and, in the picker, choose Drive and a folder.
+Todos los teléfonos deben usar la misma cuenta o una carpeta compartida entre las cuentas.	All phones must use the same account or a folder shared between the accounts.
+Sin carpeta: no se sincroniza.	No folder: not syncing.
+Carpeta:	Folder:
+Última sincronización:	Last sync:
+Este teléfono:	This phone:
+Sincronizando…	Syncing…
+No se pudo sincronizar:	Could not sync:
