@@ -68,6 +68,18 @@ class PoseJumpDetector(private val test: TestType, statureCm: Double?, private v
 
     private val stature = (statureCm ?: 170.0).coerceIn(100.0, 230.0)
     private val buf = ArrayList<Sample>()
+
+    /** Copia de los últimos [sec] segundos de muestras (para «Reportar medición»). Se puede llamar desde otro hilo. */
+    fun recent(sec: Double): List<Sample> {
+        repeat(5) {
+            try {
+                val c = ArrayList(buf)
+                val end = c.lastOrNull()?.t ?: return emptyList()
+                return c.filter { it.t >= end - sec }
+            } catch (_: ConcurrentModificationException) {}
+        }
+        return emptyList()
+    }
     private var pxPerCm: Double? = null
     private var floor: Double? = null
     private var sigma = 1.0

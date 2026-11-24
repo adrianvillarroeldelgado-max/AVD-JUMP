@@ -186,6 +186,16 @@ class HistoryActivity : BaseActivity() {
                 }.start()
             }
         }
+        labels.add("Compartir imagen del resultado"); acts.add { ShareCard.share(this, j) }
+        if (avail) {
+            labels.add("Reportar medición"); acts.add {
+                val d = org.json.JSONObject().put("method", j.method ?: "video").put("test", j.test.name).put("athlete", j.athlete)
+                    .put("fps", j.fps).put("heightCm", j.heightCm).put("flightMs", j.flightMs)
+                    .put("marks", org.json.JSONArray(j.marks)).put("jump", j.toJson())
+                j.confidence?.let { d.put("confidence", it) }
+                Report.ask(this, "historial", j.video, d)
+            }
+        }
         if (has) { labels.add("Quitar el video de este salto"); acts.add { Videos.removeFromJump(this, j); refresh() } }
         labels.add("Borrar salto"); acts.add {
             Dlg(this)

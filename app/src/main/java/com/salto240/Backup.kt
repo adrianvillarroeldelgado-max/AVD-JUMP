@@ -34,7 +34,8 @@ object Backup {
     private const val K_AUTO_LAST = "backupAutoLast"
     private const val PREFIX = "AVD-jump-respaldo-"
     /** Ajustes propios del teléfono que no se copian (rutas, permisos y fechas de respaldo). */
-    private val LOCAL_KEYS = setOf(K_LAST, K_TREE, K_AUTO_LAST, "updateSkip", "updateLastCheck")
+    private val LOCAL_KEYS = setOf(K_LAST, K_TREE, K_AUTO_LAST, "updateSkip", "updateLastCheck",
+        Diagnostics.KEY, Diagnostics.KEY_SHOWN, "diag240", "diagAi") + Sync.LOCAL_KEYS
 
     data class Info(val clients: Int, val groups: Int, val jumps: Int, val videos: Int, val created: String?)
 

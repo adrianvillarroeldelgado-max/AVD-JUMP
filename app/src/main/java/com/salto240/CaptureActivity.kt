@@ -830,6 +830,7 @@ class CaptureActivity : BaseActivity() {
                 val src = FrameSource(this, Uri.fromFile(f))
                 try {
                     // Comprobación de los fps reales del archivo: algunos teléfonos entregan menos de lo pedido sin avisar.
+                    Diagnostics.observe240(this, c.fps, src.fileFps)
                     FpsCheck.real(src.fileFps, c.fps)?.let { real ->
                         fpsNote = "El teléfono grabó a $real fps reales (no ${c.fps}): se mide con $real fps."
                         fps = real
@@ -943,6 +944,7 @@ class CaptureActivity : BaseActivity() {
                 startActivity(analysisIntent(f, fps, r)); finish()
             }, lp())
             cardButtons.addView(button("Repetir salto") { f.delete(); restartLive(null) }, lp())
+            cardButtons.addView(button("Reportar medición") { reportCapture(f, fps, l, r, null) }, lp())
             cardPrimary = null
             speak("No se pudo medir. Repite el salto.")
             return
@@ -1006,9 +1008,28 @@ class CaptureActivity : BaseActivity() {
         row.addView(button("Repetir") { cancelAutoSave(); f.delete(); restartLive(null) },
             lp(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
         cardButtons.addView(row, lp())
+        val row2 = hbox(8)
+        row2.addView(button("Imagen") { cancelAutoSave(); ShareCard.share(this, out.jump.copy(method = "240")) },
+            lp(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        row2.addView(button("Reportar") { cancelAutoSave(); reportCapture(f, fps, l, r, out.jump) },
+            lp(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        cardButtons.addView(row2, lp())
         // En la sesión de grupo se guarda solo a los 4 s, salvo que se pulse Repetir o Revisar.
         // Con confianza baja no se guarda solo: hay que decidir.
         if (groupMode && !lowConf) startAutoSave(saveBtn, 4) { doSave() }
+    }
+
+    /** Reporte de una medición de 240 fps: video, detección automática, vista previa y ajustes de la cámara. */
+    private fun reportCapture(f: File, fps: Int, l: LiveDetector.Live, r: AutoDetect.Result?, j: Jump?) {
+        val d = org.json.JSONObject()
+            .put("method", "240").put("test", test.name).put("athlete", athleteName())
+            .put("fps", fps).put("floorV", guideFrac.toDouble()).put("timerS", timerS)
+            .put("analysisMs", analysisMs).put("fastDecoder", analysisFast)
+        l.flightS?.let { d.put("previewFlightS", it) }
+        Report.autoJson(r)?.let { d.put("auto", it) }
+        j?.let { d.put("heightCm", it.heightCm).put("flightMs", it.flightMs) }
+        cfg?.let { d.put("camera", it.describe()) }
+        Report.ask(this, "240", if (f.exists()) Uri.fromFile(f).toString() else null, d)
     }
 
     private fun startAutoSave(b: Button, seconds: Int, action: () -> Unit) {

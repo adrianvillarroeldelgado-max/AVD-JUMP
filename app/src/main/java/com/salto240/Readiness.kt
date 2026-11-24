@@ -161,6 +161,18 @@ class ReadinessActivity : BaseActivity() {
                 if (r != null && w.light != r.light && r.light != Readiness.Light.NONE)
                     card.addView(text(if (w.light == Wellness.combine(r.light, w.light)) "Se toma el peor de los dos: el bienestar." else "Se toma el peor de los dos: el salto.", 12f, Col.MUTED))
             }
+            Load.status(this, c.name, today)?.let { ls ->
+                card.addView(text(String.format(Locale.getDefault(), "Carga: semana %d UA", ls.week) +
+                    (ls.acwr?.let { String.format(Locale.getDefault(), " · ACWR %.2f", it) } ?: "") +
+                    (if (ls.light == Readiness.Light.RED || ls.light == Readiness.Light.YELLOW) " · " + ls.text else ""),
+                    13f, if (ls.light == Readiness.Light.NONE) Col.MUTED else ls.light.color))
+            }
+            val btnRow = hbox(8)
+            btnRow.addView(button("+ Sesión") { LoadUi.addSession(this, c.name) { render() } }, lp(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+            btnRow.addView(button("Panel") {
+                startActivity(android.content.Intent(this, AthletePanelActivity::class.java).putExtra(MainActivity.EX_ATHLETE, c.name))
+            }, lp(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+            card.addView(btnRow, lp())
             card.addView(button(if (w == null) "Cuestionario de bienestar" else "Cambiar bienestar de hoy") {
                 Wellness.ask(this, c.name) { render() }
             }, lp())

@@ -73,6 +73,10 @@ android {
     kotlinOptions {
         jvmTarget = "17"
     }
+    testOptions {
+        // Las pruebas corren en la computadora (sin teléfono): las clases de Android devuelven valores vacíos.
+        unitTests.isReturnDefaultValues = true
+    }
     lint {
         abortOnError = false
         checkReleaseBuilds = false
@@ -82,4 +86,6 @@ android {
 dependencies {
     // Detección de pose en el teléfono (modo IA en vivo). El modelo va dentro de la app: no necesita internet.
     implementation("com.google.mlkit:pose-detection:18.0.0-beta5")
+    // Pruebas de precisión con datos sintéticos (./gradlew testGithubReleaseUnitTest).
+    testImplementation("junit:junit:4.13.2")
 }

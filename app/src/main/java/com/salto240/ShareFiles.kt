@@ -53,6 +53,8 @@ object ShareFiles {
         "xlsx" -> "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         "csv" -> "text/csv"
         "zip" -> "application/zip"
+        "png" -> "image/png"
+        "json" -> "application/json"
         else -> "application/octet-stream"
     }
 

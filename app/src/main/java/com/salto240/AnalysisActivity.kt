@@ -389,11 +389,26 @@ class AnalysisActivity : BaseActivity() {
         saveBtn = button(if (editId >= 0) "Actualizar" else "Guardar", true) { save() }
         saveRow.addView(saveBtn, lp(LinearLayout.LayoutParams.WRAP_CONTENT))
         res.addView(saveRow, lp())
+        res.addView(button("Reportar medición") { reportAnalysis() }, lp())
         val resScroll = ScrollView(this).apply { addView(res) }
         root.addView(resScroll, lp(h = dp(if (isRj) 230 else 190)))
 
         refreshMarks()
         setContentView(root)
+    }
+
+    /** Reporte del análisis: video, marcas automáticas y las actuales (corregidas o no). */
+    private fun reportAnalysis() {
+        val d = org.json.JSONObject()
+            .put("method", if (intent.getIntExtra(MainActivity.EX_FPS, 0) > 0) "240" else "video")
+            .put("test", test.name).put("athlete", intent.getStringExtra(MainActivity.EX_ATHLETE) ?: "")
+            .put("fps", capFps).put("footU", footU.toDouble()).put("footV", footV.toDouble())
+        if (isRj) d.put("marks", org.json.JSONArray(events)) else d.put("marks", org.json.JSONObject(marks.mapValues { it.value }))
+        if (isRj) d.put("autoMarks", org.json.JSONArray(autoEvents)) else d.put("autoMarks", org.json.JSONObject(autoMarks.mapValues { it.value }))
+        autoConf?.let { d.put("confidence", it) }
+        if (autoReasons.isNotEmpty()) d.put("reasons", org.json.JSONArray(autoReasons))
+        d.put("corrected", autoConf != null && !marksAreAuto())
+        Report.ask(this, "analisis", intent.getStringExtra(MainActivity.EX_URI), d)
     }
 
     private fun setZoom(z: Float) {

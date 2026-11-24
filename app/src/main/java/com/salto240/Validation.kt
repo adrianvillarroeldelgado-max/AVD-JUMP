@@ -63,13 +63,13 @@ object Validation {
             .filter { !it.avd.isNaN() && !it.ref.isNaN() }
     }
 
-    private fun save(ctx: Context, l: List<Pair>) {
+    fun save(ctx: Context, l: List<Pair>) {
         val arr = JSONArray(); l.forEach { arr.put(it.toJson()) }
         ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY, arr.toString()).apply()
     }
 
     fun add(ctx: Context, p: Pair) = save(ctx, all(ctx) + p)
-    fun delete(ctx: Context, id: Long) = save(ctx, all(ctx).filter { it.id != id })
+    fun delete(ctx: Context, id: Long) { save(ctx, all(ctx).filter { it.id != id }); Sync.tomb(ctx, "pair", id.toString()) }
 
     /** Altura sin corregir de un salto guardado (si se aplicó calibración, la original). */
     fun rawHeight(j: Jump): Double = j.extra["hRaw"] ?: j.heightCm

@@ -104,14 +104,16 @@ class MainActivity : BaseActivity() {
 
         box = input("Altura del cajón en cm", true).apply { setText(prefs.getString("lastBox", "30")) }
         load = input("Carga adicional en kg (0 = sin carga)", true).apply { setText("0") }
-        pTest.addView(caption("Cliente"))
+        // Cliente: arriba de las pestañas Medir y Atletas.
+        pClient = panel()
+        pClient.addView(caption("Cliente"))
         val cRow = hbox(8)
         clientSpinner = Spinner(this)
         cRow.addView(clientSpinner, lp(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
         cRow.addView(button("Clientes") { startActivity(Intent(this, ClientsActivity::class.java)) }, lp(LinearLayout.LayoutParams.WRAP_CONTENT))
-        pTest.addView(cRow, lp())
+        pClient.addView(cRow, lp())
         clientInfo = text("", 13f, Col.MUTED)
-        pTest.addView(clientInfo)
+        pClient.addView(clientInfo)
         clientSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
                 showClientInfo()
@@ -125,7 +127,9 @@ class MainActivity : BaseActivity() {
         loadRow = vbox(6).apply { addView(caption("Carga adicional (barra o chaleco)")); addView(load, lp()) }
         pTest.addView(boxRow, lp())
         pTest.addView(loadRow, lp())
-        root.addView(pTest, lp())
+        root.addView(pClient, lp())
+        val pageMeasure = vbox(14)
+        pageMeasure.addView(pTest, lp())
 
         spinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
@@ -164,40 +168,57 @@ class MainActivity : BaseActivity() {
         galleryBtn = button("Analizar video de la galería") { pickVideo() }
         pAct.addView(recordBtn, lp())
         pAct.addView(galleryBtn, lp())
-        root.addView(pAct, lp())
+        pageMeasure.addView(pAct, lp())
         updateFields()
         showModeInfo()
 
-        // Evaluación
+        // Atletas
+        val pageAthletes = vbox(14)
         val pEval = panel()
-        pEval.addView(caption("Evaluación"))
-        pEval.addView(button("Clientes y grupos") { startActivity(Intent(this, ClientsActivity::class.java)) }, lp())
-        pEval.addView(button("Historial de evaluaciones") { openWithAthlete(ClientHistoryActivity::class.java) }, lp())
-        pEval.addView(button("Perfil fuerza-velocidad") { openWithAthlete(FvProfileActivity::class.java) }, lp())
-        pEval.addView(button("Informe y recomendaciones") { openWithAthlete(ReportActivity::class.java) }, lp())
-        pEval.addView(button("Curva de fuerza con acelerómetro (experimental)") { openWithAthlete(AccelActivity::class.java) }, lp())
-        pEval.addView(button("Historial") { startActivity(Intent(this, HistoryActivity::class.java)) }, lp())
-        root.addView(pEval, lp())
+        pEval.addView(caption("Seguimiento del cliente"))
+        pEval.addView(button("Panel del atleta (carga, CMJ y bienestar)", true) { openWithAthlete(AthletePanelActivity::class.java) }, lp())
+        pEval.addView(button("Registrar sesión de entrenamiento") { requireClient()?.let { remember(); LoadUi.addSession(this, it.name) } }, lp())
+        pEval.addView(button("Cuestionario de bienestar") { requireClient()?.let { remember(); Wellness.ask(this, it.name) } }, lp())
+        pageAthletes.addView(pEval, lp())
+        val pRes = panel()
+        pRes.addView(caption("Resultados"))
+        pRes.addView(button("Historial de evaluaciones") { openWithAthlete(ClientHistoryActivity::class.java) }, lp())
+        pRes.addView(button("Informe y recomendaciones") { openWithAthlete(ReportActivity::class.java) }, lp())
+        pRes.addView(button("Perfil fuerza-velocidad") { openWithAthlete(FvProfileActivity::class.java) }, lp())
+        pRes.addView(button("Historial de saltos") { startActivity(Intent(this, HistoryActivity::class.java)) }, lp())
+        pRes.addView(button("Clientes y grupos") { startActivity(Intent(this, ClientsActivity::class.java)) }, lp())
+        pageAthletes.addView(pRes, lp())
 
-        // Equipos
+        // Equipo
+        val pageTeam = vbox(14)
         val pTeam = panel()
-        pTeam.addView(caption("Equipos"))
+        pTeam.addView(caption("Equipo"))
         pTeam.addView(button("Sesión de grupo con voz", true) { startActivity(Intent(this, GroupSessionActivity::class.java)) }, lp())
-        pTeam.addView(button("Cuestionario de bienestar del cliente") { requireClient()?.let { remember(); Wellness.ask(this, athleteName()) } }, lp())
-        pTeam.addView(button("Disposición diaria (fatiga)") { startActivity(Intent(this, ReadinessActivity::class.java)) }, lp())
+        pTeam.addView(button("Disposición diaria (salto, bienestar y carga)") { startActivity(Intent(this, ReadinessActivity::class.java)) }, lp())
+        pTeam.addView(button("Registrar sesión del grupo (carga)") { LoadUi.addGroup(this) }, lp())
         pTeam.addView(button("Ranking del grupo") { startActivity(Intent(this, RankingActivity::class.java)) }, lp())
-        root.addView(pTeam, lp())
+        pageTeam.addView(pTeam, lp())
 
         // Datos
+        val pageData = vbox(14)
         val pData = panel()
         pData.addView(caption("Datos"))
         backupInfo = text("", 13f, Col.MUTED)
         pData.addView(backupInfo)
-        pData.addView(button("Validación y calibración") { startActivity(Intent(this, ValidationActivity::class.java)) }, lp())
+        syncInfo = text("", 13f, Col.MUTED)
+        pData.addView(syncInfo)
+        pData.addView(button("Sincronizar teléfonos (carpeta compartida)") { startActivity(Intent(this, SyncActivity::class.java)) }, lp())
         pData.addView(button("Ajustes, copia de seguridad, Excel e idioma") { startActivity(Intent(this, SettingsActivity::class.java)) }, lp())
-        root.addView(pData, lp())
+        pData.addView(button("Validación y calibración") { startActivity(Intent(this, ValidationActivity::class.java)) }, lp())
+        pData.addView(button("Diagnóstico del teléfono") { startActivity(Intent(this, DiagnosticsActivity::class.java)) }, lp())
+        pageData.addView(pData, lp())
+        val pExp = panel()
+        pExp.addView(caption("Experimental"))
+        pExp.addView(text("Funciones en prueba: conviene validarlas con Validación y calibración antes de usarlas para decidir.", 13f, Col.MUTED))
+        pExp.addView(button("Curva de fuerza con acelerómetro") { openWithAthlete(AccelActivity::class.java) }, lp())
+        pageData.addView(pExp, lp())
 
-        // Cómo grabar
+        // Cómo grabar (en Medir)
         val pTips = panel()
         pTips.addView(caption("Cómo grabar"))
         pTips.addView(text(
@@ -212,21 +233,36 @@ class MainActivity : BaseActivity() {
             startActivity(Intent(this, ProtocolActivity::class.java)
                 .putExtra(ProtocolActivity.EX_FOCUS, if (fvBattery) "FV_BATTERY" else test.name))
         }, lp())
-        root.addView(pTips, lp())
+        pageMeasure.addView(pTips, lp())
 
-        // Versión y actualizaciones
+        // Versión y actualizaciones (en Datos)
         val ver = hbox(8)
         ver.addView(text("AVD jump ${BuildConfig.VERSION_NAME}", 13f, Col.MUTED), lp(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
         if (Updater.enabled) {
             ver.addView(button("Buscar actualizaciones") { Updater.check(this, manual = true) },
                 lp(LinearLayout.LayoutParams.WRAP_CONTENT))
         }
-        root.addView(ver, lp())
+        pageData.addView(ver, lp())
 
-        setContentView(ScrollView(this).apply {
-            setBackgroundColor(Col.BG)
-            addView(root)
-        })
+        pages = listOf(pageMeasure, pageAthletes, pageTeam, pageData)
+        pages.forEach { root.addView(it, lp()) }
+
+        // Barra de pestañas fija abajo.
+        tabBar = hbox(0).apply { setBackgroundColor(Col.SURFACE); setPadding(dp(4), dp(4), dp(4), dp(4)) }
+        listOf("Medir", "Atletas", "Equipo", "Datos").forEachIndexed { i, name ->
+            val b = android.widget.Button(this).apply {
+                text = name; isAllCaps = false; stateListAnimator = null; textSize = 14f
+                setOnClickListener { selectTab(i) }
+            }
+            tabButtons.add(b)
+            tabBar.addView(b, lp(0, dp(48), 1f))
+        }
+        scroll = ScrollView(this).apply { setBackgroundColor(Col.BG); addView(root) }
+        val outer = vbox(0).apply { setBackgroundColor(Col.BG) }
+        outer.addView(scroll, lp(h = 0, weight = 1f))
+        outer.addView(tabBar, lp())
+        setContentView(outer)
+        selectTab(prefs.getInt("homeTab", 0))
 
         Thread {
             val cfg = HighSpeed.find(this)
@@ -239,6 +275,25 @@ class MainActivity : BaseActivity() {
 
     private lateinit var modeInfo: TextView
     private lateinit var backupInfo: TextView
+    private lateinit var syncInfo: TextView
+    private lateinit var pClient: LinearLayout
+    private var pages: List<LinearLayout> = emptyList()
+    private lateinit var tabBar: LinearLayout
+    private val tabButtons = ArrayList<android.widget.Button>()
+    private lateinit var scroll: ScrollView
+
+    /** Muestra una pestaña: Medir, Atletas, Equipo o Datos. El cliente se ve solo en Medir y Atletas. */
+    private fun selectTab(i0: Int) {
+        val i = i0.coerceIn(0, pages.size - 1)
+        pages.forEachIndexed { k, p -> p.visibility = if (k == i) View.VISIBLE else View.GONE }
+        pClient.visibility = if (i <= 1) View.VISIBLE else View.GONE
+        tabButtons.forEachIndexed { k, b ->
+            b.background = rounded(if (k == i) Col.ACCENT else Col.SURFACE, 0, 10)
+            b.setTextColor(if (k == i) 0xFFFFFFFF.toInt() else Col.INK)
+        }
+        getSharedPreferences("salto240", MODE_PRIVATE).edit().putInt("homeTab", i).apply()
+        if (::scroll.isInitialized) scroll.scrollTo(0, 0)
+    }
 
     private fun showBackupInfo() {
         if (!::backupInfo.isInitialized) return
@@ -249,6 +304,10 @@ class MainActivity : BaseActivity() {
             else -> "Última copia de seguridad: " + Backup.pretty(last) + if (due) "\n⚠ Haz una copia: los datos solo están en este teléfono." else ""
         }
         backupInfo.setTextColor(if (due) Col.WARN else Col.MUTED)
+        if (::syncInfo.isInitialized) {
+            syncInfo.text = if (Sync.folder(this) == null) "Sincronización entre teléfonos: desactivada"
+                else "Sincronizado: " + Backup.pretty(Sync.last(this))
+        }
     }
 
     private fun showModeInfo() {
@@ -285,13 +344,14 @@ class MainActivity : BaseActivity() {
         Thread {
             try { Videos.cleanOrphans(app) } catch (_: Exception) {}
             try { Backup.autoIfDue(app) } catch (_: Exception) {}
-            runOnUiThread { if (!isFinishing) showBackupInfo() }
+            try { Sync.autoIfDue(app) } catch (_: Exception) {}
+            runOnUiThread { if (!isFinishing) { showBackupInfo(); loadClients() } }
         }.start()
         showBackupInfo()
         if (OnboardingActivity.shouldShow(this)) {
             OnboardingActivity.markDone(this)
             startActivity(Intent(this, OnboardingActivity::class.java))
-        }
+        } else maybeShowDiagnostics(this)
     }
 
     private fun selectedClient(): Client? = clients.getOrNull(clientSpinner.selectedItemPosition)

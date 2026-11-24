@@ -223,6 +223,14 @@ object DataIO {
                 listOf(e.total, Wellness.status(ctx, n, e.day)?.light?.label))
         }
 
+        val sLoad = ArrayList<List<Any?>>()
+        sLoad.add(listOf("Fecha", "Atleta", "Grupo", "Tipo", "Esfuerzo (0-10)", "Minutos", "Carga (UA)", "Carga semanal (UA)", "ACWR", "Monotonía"))
+        for (s in Load.all(ctx).filter { names == null || it.athlete in names }.sortedWith(compareBy({ it.athlete }, { it.day }))) {
+            val st = try { Load.status(Load.of(ctx, s.athlete), java.time.LocalDate.parse(s.day)) } catch (_: Exception) { null }
+            sLoad.add(listOf<Any?>(Evaluations.pretty(s.day), s.athlete, group(s.athlete), s.type, s.rpe, s.minutes, s.ua,
+                st?.week, st?.acwr?.let { r2(it) }, st?.monotony?.let { r2(it) }))
+        }
+
         val sClients = ArrayList<List<Any?>>()
         sClients.add(listOf("Nombre", "Grupo", "Fecha de nacimiento", "Edad", "Sexo", "Peso (kg)", "Estatura (cm)", "Deporte", "Posición",
             "Pierna dominante", "Largo de pierna (cm)", "Altura a 90° (cm)", "Notas"))
@@ -238,6 +246,7 @@ object DataIO {
                 Xlsx.Sheet("Intentos", sAtt, listOf(11, 22, 22, 9, 9, 11, 9, 9, 8, 40)),
                 Xlsx.Sheet("Disposición", sReady, listOf(11, 22, 12, 8, 10, 13, 9, 10, 7, 12)),
                 Xlsx.Sheet("Bienestar", sWell, listOf(11, 22, 12, 16, 10, 10, 14, 7, 12)),
+                Xlsx.Sheet("Carga", sLoad, listOf(11, 22, 12, 18, 10, 9, 10, 12, 8, 10)),
                 Xlsx.Sheet("Clientes", sClients, listOf(22, 12, 14, 6, 10, 9, 11, 12, 12, 14, 16, 14, 24))
             ))
         }

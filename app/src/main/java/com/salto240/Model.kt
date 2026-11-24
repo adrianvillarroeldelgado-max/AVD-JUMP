@@ -212,6 +212,7 @@ object Store {
     }
 
     fun delete(ctx: Context, id: Long) {
+        Sync.tomb(ctx, "jump", id.toString())
         val list = all(ctx)
         val gone = list.filter { it.id == id }
         save(ctx, list.filter { it.id != id })
@@ -221,6 +222,7 @@ object Store {
     /** Borra varios saltos de una vez (y sus videos propios). Devuelve cuántos se borraron. */
     fun deleteMany(ctx: Context, ids: Set<Long>): Int {
         if (ids.isEmpty()) return 0
+        ids.forEach { Sync.tomb(ctx, "jump", it.toString()) }
         val list = all(ctx)
         val gone = list.filter { it.id in ids }
         save(ctx, list.filter { it.id !in ids })
@@ -230,7 +232,8 @@ object Store {
 
     /** Reemplaza un salto ya guardado (misma id), por ejemplo al volver a medirlo a mano. */
     fun update(ctx: Context, j0: Jump) {
-        val j = Validation.calibrate(ctx, j0)
+        // "mod": cuándo se cambió (para la sincronización: gana el cambio más reciente).
+        val j = Validation.calibrate(ctx, j0).let { it.copy(extra = it.extra + ("mod" to System.currentTimeMillis().toDouble())) }
         save(ctx, all(ctx).map { if (it.id == j.id) j else it })
     }
 
@@ -252,12 +255,14 @@ object Store {
     fun saveAthlete(ctx: Context, a: Athlete) = Clients.mergeAthlete(ctx, a)
 
     fun renameAthlete(ctx: Context, old: String, new: String) {
-        save(ctx, all(ctx).map { if (it.athlete == old) it.copy(athlete = new) else it })
+        val now = System.currentTimeMillis().toDouble()
+        save(ctx, all(ctx).map { if (it.athlete == old) it.copy(athlete = new, extra = it.extra + ("mod" to now)) else it })
     }
 
     fun deleteAthleteJumps(ctx: Context, name: String) {
         val list = all(ctx)
         val gone = list.filter { it.athlete == name }
+        gone.forEach { Sync.tomb(ctx, "jump", it.id.toString()) }
         save(ctx, list.filter { it.athlete != name })
         gone.forEach { Videos.deleteIfUnused(ctx, it.video) }
     }

@@ -87,6 +87,8 @@ class AiCaptureActivity : BaseActivity() {
     private var pose: PoseDetector? = null
     @Volatile private var busy = false
     private lateinit var detector: PoseJumpDetector
+    /** Análisis por segundo más reciente (se guarda para el diagnóstico al salir). */
+    private var lastAiFps = 0.0
     private val frameTimes = ArrayDeque<Long>()
 
     /** Saltos de esta sesión (o series en saltos repetidos); kept = se guardará. */
@@ -222,6 +224,10 @@ class AiCaptureActivity : BaseActivity() {
         bottom.addView(detail)
         bottom.addView(scroll, lp())
         bottom.addView(row, lp())
+        val row2 = hbox(8)
+        row2.addView(button("Imagen") { shareImage() }, lp(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        row2.addView(button("Reportar medición") { reportAi() }, lp(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        bottom.addView(row2, lp())
         bottom.addView(fpsText)
         root.addView(bottom, FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM))
@@ -329,6 +335,7 @@ class AiCaptureActivity : BaseActivity() {
     }
 
     override fun onPause() {
+        if (lastAiFps > 0) Diagnostics.observeAi(this, lastAiFps)
         if (::level.isInitialized) level.stop()
         cancelAutoSave()
         closeCamera()
@@ -460,6 +467,7 @@ class AiCaptureActivity : BaseActivity() {
 
         overlay.update(p, uw, uh, detector.floorPx, detector.state)
         // Con menos de 18 análisis por segundo la medición pierde precisión (pocos cuadros cerca del suelo).
+        if (fps > 0) lastAiFps = fps
         if (fps > 0 && fps < 18) {
             fpsText.text = fmt("IA en el teléfono · %.0f fps · precisión baja: más luz o modo 240 fps", fps)
             fpsText.setTextColor(0xFFFFC04D.toInt())
@@ -655,6 +663,31 @@ class AiCaptureActivity : BaseActivity() {
         JumpCalc.fromFlight(test, athlete, rep.flightS, rep.contactS, mass, box, load, fpsInt(), footer())
             ?.jump?.let { j -> j.copy(notes = "IA en vivo", flags = flags, method = "ia",
                 tttMs = rep.tttS?.let { it * 1000 }, rsiMod = rep.tttS?.let { j.heightCm / 100.0 / it }) }
+
+    /** Imagen para compartir con el último salto medido. */
+    private fun shareImage() {
+        val it = items.lastOrNull { it.kept }
+        val j = it?.reps?.firstOrNull()?.let { r -> buildJump(r, it.flags) }
+        if (j == null) { Tst.makeText(this, "Todavía no hay un salto medido.", Toast.LENGTH_SHORT).show(); return }
+        cancelAutoSave()
+        ShareCard.share(this, Validation.calibrate(this, j.copy(id = System.currentTimeMillis(), date = Store.today())))
+    }
+
+    /** Reporte de la IA: últimos 12 s de puntos del cuerpo, saltos detectados y rechazos (no hay video). */
+    private fun reportAi() {
+        cancelAutoSave()
+        val d = org.json.JSONObject()
+            .put("method", "ia").put("test", test.name).put("athlete", athlete)
+            .put("statureCm", stature ?: org.json.JSONObject.NULL)
+            .put("fps", fpsInt()).put("rejections", detector.rejections)
+            .put("lastReject", PoseJumpDetector.lastReject)
+            .put("samples", Report.poseJson(detector.recent(12.0)))
+        val reps = org.json.JSONArray()
+        for (it in items) for (r in it.reps) reps.put(org.json.JSONObject().put("heightCm", r.heightCm).put("flightS", r.flightS)
+            .put("takeoffT", r.takeoffT).put("landingT", r.landingT).put("kept", it.kept).put("tttS", r.tttS ?: org.json.JSONObject.NULL))
+        d.put("reps", reps)
+        Report.ask(this, "ia", null, d)
+    }
 
     private fun save() {
         cancelAutoSave()

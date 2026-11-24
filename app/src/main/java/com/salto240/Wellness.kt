@@ -38,7 +38,7 @@ object Wellness {
         fun line(): String = ITEMS.joinToString(" · ") { "${SHORT[it.key]} ${values[it.key] ?: "—"}" } + " · total $total/20"
     }
 
-    private fun root(ctx: Context): JSONObject =
+    fun root(ctx: Context): JSONObject =
         try { JSONObject(ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY, "{}") ?: "{}") } catch (e: Exception) { JSONObject() }
 
     fun entries(ctx: Context, athlete: String): List<Entry> {
@@ -50,6 +50,9 @@ object Wellness {
     }
 
     fun of(ctx: Context, athlete: String, day: String): Entry? = entries(ctx, athlete).firstOrNull { it.day == day }
+
+    fun saveRoot(ctx: Context, r: JSONObject) =
+        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY, r.toString()).apply()
 
     fun save(ctx: Context, athlete: String, day: String, values: Map<String, Int>) {
         val r = root(ctx)

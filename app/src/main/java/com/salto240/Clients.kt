@@ -132,13 +132,18 @@ object Clients {
         val saved = c.copy(name = name)
         if (old == null) list.add(saved) else list[list.indexOf(old)] = saved
         writeClients(ctx, list)
-        if (old != null && old.name != name) Store.renameAthlete(ctx, old.name, name)
+        Sync.untomb(ctx, "client", name.lowercase(Locale.getDefault()))
+        if (old != null && old.name != name) {
+            Sync.tomb(ctx, "client", old.name.lowercase(Locale.getDefault()))
+            Store.renameAthlete(ctx, old.name, name)
+        }
         return null
     }
 
     fun delete(ctx: Context, id: Long, deleteJumps: Boolean) {
         val list = readClients(ctx)
         val c = list.firstOrNull { it.id == id } ?: return
+        Sync.tomb(ctx, "client", c.name.lowercase(Locale.getDefault()))
         writeClients(ctx, list.filter { it.id != id })
         if (deleteJumps) Store.deleteAthleteJumps(ctx, c.name)
     }
